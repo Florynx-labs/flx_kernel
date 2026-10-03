@@ -1,0 +1,158 @@
+# FLX Kernel — Walkthrough & Architecture Report (Milestone v0.1.0)
+
+> **Florynx Labs** — Modern, modular, general-purpose operating system kernel in Rust `no_std`.
+
+---
+
+## 1. Vue d'Ensemble & Décisions Architecturales
+
+La **Milestone v0.1.0** pose les fondations matérielles et logiques de **FLX Kernel**, sans artifice ni simulation. L'objectif a été de respecter scrupuleusement les principes édictés dans le Master Engineering Prompt :
+- **Pure `#![no_std]` & `#![no_main]`** pour la cible `x86_64-unknown-none`.
+- **Amorçage UEFI natif** avec passage d'informations complètes (`BootInfo` : Framebuffer, Memory Map, ACPI RSDP).
+- **Zéro simulation** : chaque sous-système amorcé communique directement avec le hardware x86_64.
+- **Double affichage temps-réel** : Port Série COM1 (16550 UART) avec codes ANSI + Framebuffer graphique GOP avec police bitmap 8x16 et scrolling matériel/mémoire.
+
+```
++-------------------------------------------------------------------------+
+|                              FLX KERNEL                                 |
+|                                                                         |
+|  +-------------------------------------------------------------------+  |
+|  |                 Sous-système de Logging & Panics                  |  |
+|  |       [OK] / [INFO] / [WARN] / [ERROR] / [DEBUG] (Dual Output)    |  |
+|  +---------------------------------+---------------------------------+  |
+|                                    |                                    |
+|             +----------------------+----------------------+             |
+|             v                                             v             |
+|  +---------------------------+               +-----------------------+  |
+|  |   Pilote Série 16550      |               |  Console Framebuffer  |  |
+|  |   UART COM1 (0x3F8)       |               |  8x16 Bitmap Font     |  |
+|  |   115200 baud, 8N1        |               |  RGB/BGR + Scrolling  |  |
+|  +---------------------------+               +-----------------------+  |
+|                                                                         |
+|  +-------------------------------------------------------------------+  |
+|  |                       Architecture x86_64                         |  |
+|  |    CPUID Vendor String   |   Instructions Port I/O   |   HLT Loop |  |
+|  +-------------------------------------------------------------------+  |
+|                                                                         |
+|  +-------------------------------------------------------------------+  |
+|  |                   Primitives de Synchronisation                   |  |
+|  |                   Spinlock<T> atomique (no_std)                   |  |
+|  +-------------------------------------------------------------------+  |
++-------------------------------------------------------------------------+
+                                    ^
+                                    | BootInfo
++-----------------------------------+-------------------------------------+
+|                      UEFI Bootloader (FLX Boot)                         |
+|                      Target: x86_64 UEFI (OVMF)                         |
++-------------------------------------------------------------------------+
+```
+
+---
+
+## 2. Structure Complète du Dépôt
+
+Le projet a été structuré sous forme d'un workspace Cargo modulaire :
+
+```
+flx-kernel/
+├── Cargo.toml                  # Configuration du Workspace (kernel + tools/runner)
+├── rust-toolchain.toml         # Définition des cibles x86_64-unknown-none
+├── README.md                   # Documentation principale avec la bannière officielle
+├── LICENSE                     # Licence MIT
+├── asset/
+│   ├── flx-cover.png           # Bannière principale FLX Kernel
+│   ├── flx-kernel.png
+│   └── flx-kernerl-logo.png
+│
+├── kernel/                     # Cœur du noyau FLX (#![no_std])
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs             # Point d'entrée kernel_main et séquence d'initialisation
+│       ├── panic.rs            # Gestionnaire de panic avec diagnostic complet et CPU halt
+│       ├── logging.rs          # Subsystem de logs unifié Série + Framebuffer
+│       ├── arch/
+│       │   └── x86_64/
+│       │       ├── mod.rs
+│       │       └── cpu.rs      # Détection CPUID, I/O ports, disable_interrupts, halt_loop
+│       ├── boot/
+│       │   ├── mod.rs
+│       │   └── info.rs         # Analyse de la memory map UEFI et métriques mémoire
+│       ├── drivers/
+│       │   ├── mod.rs
+│       │   └── serial.rs       # Pilote UART 16550 sur COM1 (0x3F8)
+│       ├── framebuffer/
+│       │   ├── mod.rs          # Abstraction console graphique
+│       │   ├── writer.rs       # Rendu pixel, couleurs 24-bit, wrapping et scrolling
+│       │   └── font.rs         # Table de glyphes bitmap 8x16 (ASCII 32..126)
+│       └── sync/
+│           ├── mod.rs
+│           └── spinlock.rs     # Mutex Spinlock sans heap ni runtime
+│
+├── tools/
+│   └── runner/                 # Outil hôte d'assemblage d'image UEFI et lancement QEMU
+│       ├── Cargo.toml
+│       └── src/
+│           └── main.rs
+│
+└── docs/
+    ├── architecture.md         # Spécification technique et roadmap v0.1 -> v1.0
+    └── boot.md                 # Protocole de démarrage UEFI et transitions mémoire
+```
+
+---
+
+## 3. Détail des Sous-Systèmes Implémentés
+
+### 3.1 Pilote Série 16550 UART (`kernel/src/drivers/serial.rs`)
+- **Port de base** : COM1 (`0x3F8`).
+- **Configuration** : Désactivation des interruptions, accès au diviseur (DLAB), réglage à **115200 bauds** (diviseur 1), format **8N1** (8 bits de données, aucune parité, 1 bit de stop), activation FIFO 14 octets avec vidage TX/RX, assertion RTS/DTR.
+- **Sécurité** : Wrapping dans un `Spinlock<SerialPort>` global avec macros ergonomiques `serial_print!` et `serial_println!`.
+
+### 3.2 Console Graphique Framebuffer (`kernel/src/framebuffer/`)
+- **Compatibilité formats** : Supporte nativement RGB (32-bit), BGR (32-bit standard UEFI GOP) et U8 grayscale.
+- **Police 8x16 intégrée** : Table complète de caractères monospace ASCII 32 à 126 stockée en mémoire flash/rodata (`font.rs`), consommant seulement ~1.5 Ko.
+- **Fonctionnalités avancées** : 
+  - Défilement vertical automatique (`scroll()`) lors du franchissement de la hauteur de l'écran.
+  - Palette de couleurs adaptées (`Color::BLACK`, `Color::WHITE`, `Color::CYAN`, `Color::GREEN`, `Color::YELLOW`, `Color::RED`, `Color::GRAY`).
+  - Macros `fb_print!` et `fb_println!`.
+
+### 3.3 Logger Unifié (`kernel/src/logging.rs`)
+- Implémente le trait officiel `log::Log`.
+- Diffuse en parallèle :
+  - Sur **Série COM1** avec séquences de couleurs ANSI terminal.
+  - Sur l'**Écran Framebuffer** avec les couleurs RGB correspondantes.
+- Macros dédiées : `kok!`, `kinfo!`, `kwarn!`, `kerror!`, `kdebug!`.
+
+### 3.4 Analyseur de Memory Map (`kernel/src/boot/info.rs`)
+- Parcourt les descripteurs physiques transmis par UEFI (`MemoryRegion`).
+- Calcule en temps réel :
+  - Nombre total de régions mémoire.
+  - Quantité totale de RAM détectée.
+  - Quantité de mémoire utilisable (`Usable`).
+  - Mémoire réservée pour le firmware/ACPI et le bootloader.
+
+### 3.5 Gestionnaire de Panic Sécurisé (`kernel/src/panic.rs`)
+- Désactive immédiatement les interruptions matérielles (`cli`).
+- Déverrouille de force les verrous spinlock (`force_unlock()`) pour garantir que le message d'erreur puisse s'afficher même en cas de panique au milieu d'un verrouillage console.
+- Affiche une bannière d'alerte rouge avec le fichier source, la ligne, la colonne, le message d'erreur et le CPU détecté.
+- Gèle le CPU via `arch::x86_64::cpu::halt_loop()`.
+
+---
+
+## 4. Guide d'Exécution & Vérification
+
+### Compilation du Kernel
+```bash
+cargo build --package flx-kernel --target x86_64-unknown-none
+```
+
+### Génération de l'image UEFI et amorçage sous QEMU
+```bash
+cargo run --package flx-runner
+```
+
+### Génération seule de l'image disque UEFI (`.img`)
+```bash
+cargo run --package flx-runner -- --no-run
+```
+L'image UEFI amorçable est générée sous `target/flx-kernel-uefi-debug.img`.

@@ -1,0 +1,11 @@
+[package]
+name = "flx-runner"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bootloader = "0.11.17"
+ovmf-prebuilt = "0.2.9"
+anyhow = "1.0"
