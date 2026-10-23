@@ -21,7 +21,7 @@ use bootloader_api::config::Mapping;
 use bootloader_api::{entry_point, BootInfo, BootloaderConfig};
 use log::LevelFilter;
 
-pub const KERNEL_VERSION: &str = "0.2.0-dev";
+pub const KERNEL_VERSION: &str = "0.2.0";
 
 /// Bootloader configuration requesting dynamic physical memory mapping.
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
