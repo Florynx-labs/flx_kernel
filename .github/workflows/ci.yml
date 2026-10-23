@@ -25,11 +25,11 @@ jobs:
 
       - name: Build kernel
         run: |
-          set -o pipefail
-          if ! cargo build --package flx-kernel --target x86_64-unknown-none --color never 2>&1 | tee build.log; then
-            # Surface compiler errors as annotations (readable without downloading logs).
-            msg=$(grep -v '^\s*$' build.log | head -c 6000 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
-            echo "::error title=kernel build failed::${msg}"
+          status=0
+          cargo build --package flx-kernel --target x86_64-unknown-none --color never > build.log 2>&1 || status=$?
+          cat build.log
+          if [ "$status" -ne 0 ]; then
+            python3 tools/ci/annotate.py build.log "kernel build failed (exit $status)" 7000
             exit 1
           fi
 

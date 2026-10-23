@@ -21,7 +21,7 @@ echo "============================================"
 
 # `timeout` kills QEMU after the idle loop is reached: 124 is the expected exit status.
 if [ "${status}" -ne 124 ]; then
-  echo "::error::QEMU/runner exited early with status ${status} (expected to run until timeout)"
+  python3 tools/ci/annotate.py "${LOG}" "boot test: runner exited early (status ${status})" 7000
   exit 1
 fi
 
@@ -54,6 +54,7 @@ forbid "[ERROR]"
 forbid "FAILED"
 
 if [ "${fail}" -ne 0 ]; then
+  python3 tools/ci/annotate.py "${LOG}" "boot validation failed" 7000
   exit 1
 fi
 echo "FLX Kernel boot validation: PASSED"
