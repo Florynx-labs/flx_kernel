@@ -72,10 +72,17 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // 5. Locate OVMF firmware
+    // 5. Locate OVMF firmware (downloaded once and cached under target/ovmf).
     println!("[4/4] Locating OVMF UEFI firmware...");
-    let ovmf_path = ovmf_prebuilt::ovmf_pure_efi();
-    println!("      OVMF firmware located at: {}", ovmf_path.display());
+    let prebuilt = ovmf_prebuilt::Prebuilt::fetch(
+        ovmf_prebuilt::Source::LATEST,
+        root_dir.join("target").join("ovmf"),
+    )
+    .context("Failed to fetch OVMF firmware")?;
+    let ovmf_code = prebuilt.get_file(ovmf_prebuilt::Arch::X64, ovmf_prebuilt::FileType::Code);
+    let ovmf_vars = prebuilt.get_file(ovmf_prebuilt::Arch::X64, ovmf_prebuilt::FileType::Vars);
+    println!("      OVMF code: {}", ovmf_code.display());
+    println!("      OVMF vars: {}", ovmf_vars.display());
 
     // 6. Locate QEMU binary
     let qemu_bin = find_qemu()?;
@@ -88,8 +95,13 @@ fn main() -> Result<()> {
 
     let mut qemu_cmd = Command::new(&qemu_bin);
     qemu_cmd
-        .arg("-bios")
-        .arg(&ovmf_path)
+        .arg("-drive")
+        .arg(format!(
+            "if=pflash,format=raw,readonly=on,file={}",
+            ovmf_code.display()
+        ))
+        .arg("-drive")
+        .arg(format!("if=pflash,format=raw,file={}", ovmf_vars.display()))
         .arg("-drive")
         .arg(format!("format=raw,file={}", uefi_image.display()))
         .arg("-serial")
@@ -135,7 +147,7 @@ fn find_qemu() -> Result<PathBuf> {
 }
 
 mod which {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     pub fn which(binary_name: &str) -> Result<PathBuf, ()> {
         let path_var = std::env::var_os("PATH").ok_or(())?;

@@ -46,12 +46,12 @@
 |                                                                         |
 |  +--------------------+  +---------------------+  +------------------+  |
 |  | 16550 UART Serial  |  | Framebuffer Console |  | Timers & PIC/APIC|  |
-|  | Driver (COM1)      |  | 8x16 Monospace Font |  | (Milestone v0.2) |  |
+|  | Driver (COM1)      |  | 8x16 Monospace Font |  | (PIC/PIT: v0.2)  |  |
 |  +--------------------+  +---------------------+  +------------------+  |
 |                                                                         |
 |  +-------------------------------------------------------------------+  |
 |  |               x86_64 Architecture Layer (arch/x86_64)             |  |
-|  |        CPUID  |  GDT/IDT (v0.2)  |  Port I/O  |  CPU Control      |  |
+|  |        CPUID  |    GDT/IDT       |  Port I/O  |  CPU Control      |  |
 |  +-------------------------------------------------------------------+  |
 +-------------------------------------------------------------------------+
                                     ^
@@ -69,7 +69,7 @@
 
 ---
 
-## 3. Subsystem Breakdown (Milestone v0.1.0)
+## 3. Subsystem Breakdown (Milestone v0.2.0)
 
 | Subsystem | Location | Status | Description |
 |-----------|----------|--------|-------------|
@@ -78,15 +78,21 @@
 | **Framebuffer** | `kernel/src/framebuffer/` | **READY** | Linear RGB/BGR framebuffer console, 8x16 font, text scrolling. |
 | **Logging** | `kernel/src/logging.rs` | **READY** | Dual-output logging (Serial with ANSI colors, FB with RGB colors). |
 | **Panic Handler** | `kernel/src/panic.rs` | **READY** | Lock-safe, halts CPU, outputs location and panic diagnostic banner. |
-| **Sync Primitives**| `kernel/src/sync/` | **READY** | Bare-metal `Spinlock<T>` with atomic acquire-release semantics. |
-| **Arch Support** | `kernel/src/arch/x86_64/` | **READY** | Low-level CPUID identification, interrupt disabling, `hlt` loop. |
+| **Sync Primitives**| `kernel/src/sync/` | **READY** | Bare-metal IRQ-safe `Spinlock<T>` (disables local interrupts while held). |
+| **Arch Support** | `kernel/src/arch/x86_64/` | **READY** | CPUID, port I/O, interrupt control, `hlt` loop. |
+| **GDT / TSS** | `kernel/src/arch/x86_64/gdt.rs` | **READY** | Flat 64-bit segments (kernel/user), TSS with IST stacks for #DF and NMI. |
+| **IDT & Interrupts** | `kernel/src/arch/x86_64/{idt,interrupts}.rs` | **READY** | 256 assembly stubs → uniform `InterruptFrame` → Rust dispatcher; exception dumps; handler registry. Stub table uses PC-relative offsets (PIE-safe). |
+| **PIC** | `kernel/src/drivers/pic.rs` | **READY** | 8259 remapped to vectors 32–47, masking, EOI, spurious IRQ filtering. Local APIC / IO-APIC: **NOT IMPLEMENTED**. |
+| **Timer** | `kernel/src/drivers/pit.rs` | **READY** | PIT channel 0 at 100 Hz, tick counter, uptime. |
+| **Keyboard** | `kernel/src/drivers/keyboard.rs` | **READY** | PS/2 IRQ 1, scancode set 1 US layout, Shift/Caps Lock, ring buffer. |
+| **Physical Memory** | `kernel/src/mm/frame.rs` | **READY** | Bitmap frame allocator over the UEFI memory map, double-free detection, self-test. |
 
 ---
 
 ## 4. Roadmap
 
-* **v0.1.0 (Current)**: UEFI Boot, x86_64, Framebuffer, Serial COM1, Panic Handler, Logging, Memory Map.
-* **v0.2.0**: GDT, IDT, CPU Exceptions, Interrupts (Timer, Keyboard), Physical Frame Allocator.
+* **v0.1.0**: UEFI Boot, x86_64, Framebuffer, Serial COM1, Panic Handler, Logging, Memory Map.
+* **v0.2.0 (Current)**: GDT, IDT, CPU Exceptions, Interrupts (Timer, Keyboard), Physical Frame Allocator.
 * **v0.3.0**: Virtual Memory Paging, Kernel Heap, Dynamic Memory Allocator.
 * **v0.4.0**: Cooperative & Preemptive Scheduler, Tasks, Context Switching.
 * **v0.5.0**: Processes, Threads, User/Kernel Separation, Syscall ABI.

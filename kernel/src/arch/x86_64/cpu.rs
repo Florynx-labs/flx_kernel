@@ -50,6 +50,28 @@ pub fn enable_interrupts() {
     }
 }
 
+/// Returns `true` if maskable interrupts are currently enabled (RFLAGS.IF).
+#[inline]
+pub fn interrupts_enabled() -> bool {
+    let flags: u64;
+    // SAFETY: `pushfq; pop` only reads RFLAGS. It uses the stack, so no `nostack` option.
+    unsafe {
+        core::arch::asm!("pushfq", "pop {}", out(reg) flags, options(nomem, preserves_flags));
+    }
+    flags & (1 << 9) != 0
+}
+
+/// Reads CR2 (faulting virtual address after a page fault).
+#[inline]
+pub fn read_cr2() -> u64 {
+    let value: u64;
+    // SAFETY: Reading CR2 has no side effects.
+    unsafe {
+        core::arch::asm!("mov {}, cr2", out(reg) value, options(nomem, nostack, preserves_flags));
+    }
+    value
+}
+
 /// Puts the CPU into a low-power halt state until the next interrupt arrives (`hlt`).
 #[inline]
 pub fn halt() {

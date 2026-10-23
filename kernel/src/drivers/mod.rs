@@ -1,6 +1,9 @@
 //! Drivers subsystem for FLX Kernel.
 //!
-//! Provides hardware abstraction drivers for platform devices, starting with
-//! standard x86 serial communications (16550 UART) for debugging and logging.
+//! Provides hardware abstraction drivers for platform devices: serial (16550 UART),
+//! legacy PIC, PIT system timer and PS/2 keyboard.
 
+pub mod keyboard;
+pub mod pic;
+pub mod pit;
 pub mod serial;
