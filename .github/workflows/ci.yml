@@ -35,7 +35,11 @@ jobs:
           fi
 
       - name: Boot test
-        run: tools/ci/check_boot.sh 90
+        env:
+          # The `bootloader` crate's build script uses `-Z build-std`, which needs a nightly
+          # cargo; RUSTC_BOOTSTRAP lets it run on the pinned stable toolchain.
+          RUSTC_BOOTSTRAP: "1"
+        run: tools/ci/check_boot.sh 150
 
       - name: Upload serial log
         if: always()
