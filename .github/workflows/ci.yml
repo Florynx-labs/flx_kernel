@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  boot-test:
+    name: Build + boot under QEMU (UEFI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust components
+        run: |
+          rustup show
+          rustup component add llvm-tools-preview rust-src
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86
+
+      - name: Build kernel
+        run: cargo build --package flx-kernel --target x86_64-unknown-none
+
+      - name: Boot test
+        run: tools/ci/check_boot.sh 90
+
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-serial-log
+          path: boot-serial*.log
