@@ -24,7 +24,14 @@ jobs:
           sudo apt-get install -y qemu-system-x86
 
       - name: Build kernel
-        run: cargo build --package flx-kernel --target x86_64-unknown-none
+        run: |
+          set -o pipefail
+          if ! cargo build --package flx-kernel --target x86_64-unknown-none --color never 2>&1 | tee build.log; then
+            # Surface compiler errors as annotations (readable without downloading logs).
+            msg=$(grep -v '^\s*$' build.log | head -c 6000 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=kernel build failed::${msg}"
+            exit 1
+          fi
 
       - name: Boot test
         run: tools/ci/check_boot.sh 90
