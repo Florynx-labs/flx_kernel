@@ -84,7 +84,7 @@ global_asm!(
     .endm
 
     .macro FLX_TABLE_ENTRY n
-        .quad flx_isr_\n
+        .long flx_isr_\n - .
     .endm
 
     .text
@@ -133,7 +133,7 @@ global_asm!(
         iretq
 
     .section .rodata.flx_isr_table,"a"
-    .balign 8
+    .balign 4
     .global flx_isr_table
     flx_isr_table:
     .set flx_vec, 0
@@ -149,13 +149,22 @@ global_asm!(
 );
 
 extern "C" {
-    static flx_isr_table: [u64; 256];
+    /// 256 self-relative offsets: `stub_address = &table[i] + table[i]`.
+    ///
+    /// Offsets (not absolute addresses) keep the kernel position-independent: the target is
+    /// linked as PIE and absolute 64-bit relocations against local symbols are rejected.
+    static flx_isr_table: [i32; 256];
 }
 
 /// Address of the assembly stub for `vector` (used by the IDT).
 pub fn isr_stub_address(vector: usize) -> u64 {
-    // SAFETY: `flx_isr_table` is a read-only table of 256 stub addresses emitted above.
-    unsafe { flx_isr_table[vector] }
+    assert!(vector < 256);
+    // SAFETY: `flx_isr_table` is a read-only table of 256 entries emitted above, and
+    // `vector` is in range, so the entry pointer is valid for reads.
+    unsafe {
+        let entry = core::ptr::addr_of!(flx_isr_table).cast::<i32>().add(vector);
+        (entry as i64 + entry.read() as i64) as u64
+    }
 }
 
 // ---------------------------------------------------------------------------------------
