@@ -57,4 +57,5 @@ if [ "${fail}" -ne 0 ]; then
   python3 tools/ci/annotate.py "${LOG}" "boot validation failed" 7000
   exit 1
 fi
+python3 tools/ci/annotate.py "${LOG}" "boot log (validation PASSED)" 7000 notice
 echo "FLX Kernel boot validation: PASSED"
