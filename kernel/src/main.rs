@@ -76,6 +76,21 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // 5. Initialize Logger (dual-output: Serial COM1 + Framebuffer).
     logging::init(LevelFilter::Info);
 
+    // The allocator must be usable before any subsystem can rely on heap allocations.
+    match heap_init {
+        Ok(()) => match mm::heap::self_test(&GLOBAL_ALLOCATOR) {
+            Ok(()) => kok!("Kernel heap (1 MiB early arena)"),
+            Err(error) => {
+                kerror!("Kernel heap self-test failed: {}", error);
+                loop { arch::x86_64::cpu::halt(); }
+            }
+        },
+        Err(error) => {
+            kerror!("Kernel heap initialization failed: {:?}", error);
+            loop { arch::x86_64::cpu::halt(); }
+        }
+    }
+
     // 6. Welcome Banner — Framebuffer
     framebuffer::set_color(framebuffer::Color::CYAN);
     crate::fb_println!("FLX KERNEL");
@@ -128,6 +143,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                     match mm::frame::self_test() {
                         Ok(()) => kok!("Frame allocator self-test"),
                         Err(e) => kerror!("Frame allocator self-test FAILED: {}", e),
+                    }
+                    match GLOBAL_ALLOCATOR.enable_growth(offset) {
+                        Ok(()) => kok!(
+                            "Heap growth ({} arenas max, {} KiB initial growth arena)",
+                            mm::heap::MAX_GROWTH_ARENAS,
+                            mm::heap::GROWTH_ARENA_MIN_SIZE / 1024
+                        ),
+                        Err(e) => kerror!("Heap growth unavailable: {:?}", e),
                     }
                 }
                 Err(e) => kerror!("Frame allocator init failed: {:?}", e),
