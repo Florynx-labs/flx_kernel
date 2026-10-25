@@ -24,19 +24,26 @@ impl<'a> KernelBootInfo<'a> {
         let mut summary = MemorySummary::default();
 
         for region in boot_info.memory_regions.iter() {
-            let size = region.end - region.start;
-            summary.total_bytes += size;
-            summary.region_count += 1;
+            // Ignore malformed regions instead of allowing subtraction to
+            // underflow. Saturating arithmetic keeps corrupt map entries from
+            // wrapping the reported memory totals.
+            let Some(size) = region.end.checked_sub(region.start) else {
+                continue;
+            };
+
+            summary.region_count = summary.region_count.saturating_add(1);
+            summary.total_bytes = summary.total_bytes.saturating_add(size);
 
             match region.kind {
                 MemoryRegionKind::Usable => {
-                    summary.usable_bytes += size;
+                    summary.usable_bytes = summary.usable_bytes.saturating_add(size);
                 }
                 MemoryRegionKind::Bootloader => {
-                    summary.bootloader_bytes += size;
+                    summary.bootloader_bytes =
+                        summary.bootloader_bytes.saturating_add(size);
                 }
                 _ => {
-                    summary.reserved_bytes += size;
+                    summary.reserved_bytes = summary.reserved_bytes.saturating_add(size);
                 }
             }
         }
