@@ -25,6 +25,8 @@ pub enum FrameError {
     InvalidAddress,
     /// The frame being freed is not currently allocated.
     DoubleFree,
+    /// The frame is reserved memory and was never handed out by this allocator.
+    NotAllocated,
 }
 
 /// Snapshot of allocator statistics.
@@ -36,6 +38,8 @@ pub struct FrameStats {
 
 pub struct BitmapFrameAllocator {
     bitmap: &'static mut [u64],
+    /// Tracks ownership separately from the used bitmap so reserved frames cannot be freed.
+    allocated: &'static mut [u64],
     total_frames: usize,
     free_frames: usize,
     next_hint: usize,
@@ -65,17 +69,21 @@ impl BitmapFrameAllocator {
 
         let total_frames = (align_up(max_addr, FRAME_SIZE) / FRAME_SIZE) as usize;
         let words = total_frames.div_ceil(64);
-        let bitmap_bytes = (words * 8) as u64;
-        let bitmap_frames = align_up(bitmap_bytes, FRAME_SIZE) / FRAME_SIZE;
+        // Two bitmaps: one records used/free frames; the other records frames actually
+        // allocated by this allocator. This prevents freeing firmware/reserved memory.
+        let metadata_bytes = (words as u64)
+            .checked_mul(16)
+            .ok_or(FrameError::NoSpaceForBitmap)?;
+        let metadata_frames = align_up(metadata_bytes, FRAME_SIZE) / FRAME_SIZE;
 
-        // Find a usable region (above MIN_PHYS_ADDR) that can host the bitmap.
+        // Find a usable region (above MIN_PHYS_ADDR) that can host both bitmaps.
         let bitmap_phys = regions
             .iter()
             .filter(|r| r.kind == MemoryRegionKind::Usable)
             .find_map(|r| {
                 let start = align_up(r.start.max(MIN_PHYS_ADDR), FRAME_SIZE);
                 let end = align_down(r.end, FRAME_SIZE);
-                (end > start && end - start >= bitmap_frames * FRAME_SIZE).then_some(start)
+                (end > start && end - start >= metadata_frames * FRAME_SIZE).then_some(start)
             })
             .ok_or(FrameError::NoSpaceForBitmap)?;
 
@@ -83,8 +91,14 @@ impl BitmapFrameAllocator {
         let bitmap = core::slice::from_raw_parts_mut(bitmap_ptr, words);
         bitmap.fill(u64::MAX); // everything used until proven free
 
+        // Place the ownership bitmap directly after the used/free bitmap.
+        let allocated_ptr = (phys_offset + bitmap_phys + (words as u64) * 8) as *mut u64;
+        let allocated = core::slice::from_raw_parts_mut(allocated_ptr, words);
+        allocated.fill(0);
+
         let mut alloc = Self {
             bitmap,
+            allocated,
             total_frames,
             free_frames: 0,
             next_hint: 0,
@@ -104,7 +118,7 @@ impl BitmapFrameAllocator {
 
         // The bitmap's own frames are in use.
         let first = (bitmap_phys / FRAME_SIZE) as usize;
-        for frame in first..first + bitmap_frames as usize {
+        for frame in first..first + metadata_frames as usize {
             alloc.set_bit(frame);
             alloc.free_frames -= 1;
         }
@@ -115,6 +129,21 @@ impl BitmapFrameAllocator {
     #[inline]
     fn is_used(&self, frame: usize) -> bool {
         self.bitmap[frame / 64] & (1 << (frame % 64)) != 0
+    }
+
+    #[inline]
+    fn is_allocated(&self, frame: usize) -> bool {
+        self.allocated[frame / 64] & (1 << (frame % 64)) != 0
+    }
+
+    #[inline]
+    fn set_allocated(&mut self, frame: usize, allocated: bool) {
+        let mask = 1u64 << (frame % 64);
+        if allocated {
+            self.allocated[frame / 64] |= mask;
+        } else {
+            self.allocated[frame / 64] &= !mask;
+        }
     }
 
     #[inline]
@@ -141,6 +170,7 @@ impl BitmapFrameAllocator {
                     continue; // padding bits past the end are always set, but stay defensive
                 }
                 self.set_bit(frame);
+                self.set_allocated(frame, true);
                 self.free_frames -= 1;
                 self.next_hint = frame + 1;
                 return Some(frame as u64 * FRAME_SIZE);
@@ -161,6 +191,10 @@ impl BitmapFrameAllocator {
         if !self.is_used(frame) {
             return Err(FrameError::DoubleFree);
         }
+        if !self.is_allocated(frame) {
+            return Err(FrameError::NotAllocated);
+        }
+        self.set_allocated(frame, false);
         self.clear_bit(frame);
         self.free_frames += 1;
         if frame < self.next_hint {
@@ -238,4 +272,70 @@ pub fn self_test() -> Result<(), &'static str> {
         return Err("free count wrong after free");
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{BitmapFrameAllocator, FrameError, FRAME_SIZE, MIN_PHYS_ADDR};
+
+    fn allocator_with_free_frames(frames: &[usize]) -> BitmapFrameAllocator {
+        let total_frames = 512;
+        let words = total_frames / 64;
+        let mut used = vec![u64::MAX; words];
+        let owned = vec![0u64; words];
+
+        for &frame in frames {
+            used[frame / 64] &= !(1u64 << (frame % 64));
+        }
+
+        BitmapFrameAllocator {
+            bitmap: Box::leak(used.into_boxed_slice()),
+            allocated: Box::leak(owned.into_boxed_slice()),
+            total_frames,
+            free_frames: frames.len(),
+            next_hint: 0,
+        }
+    }
+
+    #[test]
+    fn reserved_used_frame_cannot_be_freed() {
+        let mut allocator = allocator_with_free_frames(&[]);
+        let reserved = 300 * FRAME_SIZE;
+
+        assert!(reserved >= MIN_PHYS_ADDR);
+        assert!(allocator.is_used(300));
+        assert!(!allocator.is_allocated(300));
+        assert_eq!(allocator.deallocate(reserved), Err(FrameError::NotAllocated));
+        assert!(allocator.is_used(300));
+        assert_eq!(allocator.free_frames, 0);
+    }
+
+    #[test]
+    fn allocator_owned_frame_can_be_freed_once() {
+        let mut allocator = allocator_with_free_frames(&[300]);
+        let address = allocator.allocate().expect("one free frame should exist");
+
+        assert_eq!(address, 300 * FRAME_SIZE);
+        assert!(allocator.is_used(300));
+        assert!(allocator.is_allocated(300));
+        assert_eq!(allocator.free_frames, 0);
+
+        allocator.deallocate(address).expect("owned frame should be freed");
+        assert!(!allocator.is_used(300));
+        assert!(!allocator.is_allocated(300));
+        assert_eq!(allocator.free_frames, 1);
+        assert_eq!(allocator.deallocate(address), Err(FrameError::DoubleFree));
+    }
+
+    #[test]
+    fn invalid_free_does_not_change_allocator_state() {
+        let mut allocator = allocator_with_free_frames(&[300]);
+        let before = allocator.free_frames;
+
+        assert_eq!(allocator.deallocate(300 * FRAME_SIZE + 1), Err(FrameError::InvalidAddress));
+        assert_eq!(allocator.deallocate(100 * FRAME_SIZE), Err(FrameError::InvalidAddress));
+        assert_eq!(allocator.free_frames, before);
+        assert!(!allocator.is_used(300));
+    }
 }

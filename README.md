@@ -45,11 +45,11 @@ FLX Kernel is engineered as a foundational technology base designed to evolve in
   - CPU exception handler with full register dump (page fault reports CR2 and error bits)
 - **CPU tables**: GDT + 64-bit TSS (IST stacks for double fault and NMI), IDT with 256 vectors
 - **Interrupts**: 8259 PIC remapped to vectors 32–47 (spurious IRQ handling), PIT system timer at 100 Hz, PS/2 keyboard (scancode set 1, US layout, ring buffer)
-- **Physical memory**: UEFI memory map parsing and a bitmap **physical frame allocator** (4 KiB frames, double-free detection, boot-time self-test)
+- **Physical memory**: UEFI memory map parsing and a bitmap **physical frame allocator** (4 KiB frames, double-free detection, protection against freeing reserved frames, boot-time self-test)
 - **Virtual memory foundation**: inspect active CR3 tables; translate 4 KiB / 2 MiB / 1 GiB mappings; map and unmap 4 KiB pages; invalidate TLB after edits
 - **Virtual range allocator**: fixed-capacity, bitmap-backed contiguous virtual-page reservation with bounds, alignment, canonical-address, and double-free checks; does not map pages by itself
 - **Sync**: IRQ-safe `Spinlock<T>` (local interrupts are disabled while the lock is held)
-- **CI**: every push boots the kernel headless under QEMU/OVMF and validates the serial log
+- **Tests / CI**: Python source-contract regression tests and Rust host-side memory tests run before the kernel build and headless QEMU/OVMF boot validation
 
 **Not implemented yet**: a production kernel heap, isolated process address spaces, Local APIC / IO-APIC and SMP, scheduler/context switching, userspace ABI, VFS/filesystems, networking, and a broad driver model. These are planned in staged milestones; the current paging API is an early foundation, not complete virtual memory management.
 
@@ -78,6 +78,8 @@ flx-kernel/
 │       └── sync/               # Bare-metal IRQ-safe Spinlock<T>
 ├── tools/
 │   ├── runner/                 # Host tool to build UEFI disk & run QEMU
+│   ├── mm-tests/               # Host-side Rust tests for memory-management algorithms
+│   ├── tests/                  # Python regression tests for allocator safety contracts
 │   └── ci/                     # Boot validation script used by CI
 └── docs/                       # Technical documentation
     ├── architecture.md         # Global architecture & roadmap
@@ -113,6 +115,17 @@ cargo run --package flx-runner
 > `RUSTC_BOOTSTRAP=1 cargo run --package flx-runner`
 > (PowerShell: `$env:RUSTC_BOOTSTRAP=1; cargo run --package flx-runner`).
 > OVMF firmware is downloaded automatically into `target/ovmf`.
+
+### Run memory-management tests
+
+```bash
+cargo test --package flx-mm-tests
+python3 -m unittest discover -s tools/tests -v
+```
+
+The Rust harness tests the production memory-management modules on the host. The Python
+suite guards key physical-frame allocator safety contracts, including ownership tracking,
+address validation, and free-frame accounting.
 
 ### Headless boot test (same check as CI)
 

@@ -28,6 +28,9 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends qemu-system-x86
 
+      - name: Test memory-management source contracts (Python)
+        run: python3 -m unittest discover -s tools/tests -v
+
       - name: Test memory-management algorithms
         run: cargo test --package flx-mm-tests --color never
 

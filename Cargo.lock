@@ -229,6 +229,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "flx-mm-tests"
+version = "0.2.0"
+dependencies = [
+ "bootloader_api",
+]
+
+[[package]]
 name = "flx-runner"
 version = "0.2.0"
 dependencies = [
