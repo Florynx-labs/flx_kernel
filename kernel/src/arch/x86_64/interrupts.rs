@@ -112,8 +112,11 @@ global_asm!(
         push r14
         push r15
         mov rdi, rsp
+        mov r12, rsp
+        and rsp, -16
         cld
         call {dispatch}
+        mov rsp, r12
         pop r15
         pop r14
         pop r13
