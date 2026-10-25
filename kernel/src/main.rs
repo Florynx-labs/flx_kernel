@@ -36,6 +36,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // 1. Initialize COM1 Serial port first (before any other output).
     drivers::serial::SERIAL1.lock().init();
 
+    // Install the baseline IDT before continuing kernel initialization.
+    // SAFETY: early boot is single-core and interrupts are not enabled here.
+    unsafe { arch::x86_64::interrupts::init() };
+
     // 2. Identify CPU — pure register read, no memory borrow.
     let cpu_vendor = arch::x86_64::cpu::get_cpu_vendor();
 
@@ -92,6 +96,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         mem.total_bytes / (1024 * 1024)
     );
     kok!("Framebuffer");
+    kok!("IDT (256 fail-stop gates)");
 
     crate::fb_println!();
     framebuffer::set_color(framebuffer::Color::GREEN);
