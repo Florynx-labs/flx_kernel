@@ -145,11 +145,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                         Err(e) => kerror!("Frame allocator self-test FAILED: {}", e),
                     }
                     match GLOBAL_ALLOCATOR.enable_growth(offset) {
-                        Ok(()) => kok!(
-                            "Heap growth ({} arenas max, {} KiB initial growth arena)",
-                            mm::heap::MAX_GROWTH_ARENAS,
-                            mm::heap::GROWTH_ARENA_MIN_SIZE / 1024
-                        ),
+                        Ok(()) => {
+                            kok!(
+                                "Heap growth ({} arenas max, {} KiB initial growth arena)",
+                                mm::heap::MAX_GROWTH_ARENAS,
+                                mm::heap::GROWTH_ARENA_MIN_SIZE / 1024
+                            );
+                            match mm::heap::growth_self_test(&GLOBAL_ALLOCATOR) {
+                                Ok(()) => kok!(
+                                    "Heap growth self-test ({} arena(s) mapped)",
+                                    GLOBAL_ALLOCATOR.growth_arena_count()
+                                ),
+                                Err(e) => kerror!("Heap growth self-test FAILED: {}", e),
+                            }
+                        }
                         Err(e) => kerror!("Heap growth unavailable: {:?}", e),
                     }
                 }
