@@ -6,5 +6,6 @@
 //! will be layered on top after a kernel virtual address arena is defined safely.
 
 pub mod frame;
+pub mod heap;
 pub mod paging;
 pub mod virtual_range;

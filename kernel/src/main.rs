@@ -12,6 +12,9 @@ pub mod drivers;
 pub mod framebuffer;
 pub mod logging;
 pub mod mm;
+
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mm::heap::KernelHeap = mm::heap::KernelHeap::new();
 pub mod sync;
 
 // panic handler is in its own file and auto-linked as #[panic_handler]
@@ -40,6 +43,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     // 1. Initialize COM1 Serial port first (before any other output).
     drivers::serial::SERIAL1.lock().init();
+
+    // Initialize the fixed kernel heap before the remaining subsystems. It is backed by a
+    // page-aligned, statically mapped 1 MiB BSS arena for this milestone.
+    let heap_init = mm::heap::init(&GLOBAL_ALLOCATOR);
 
     // 2. Identify CPU — pure register read, no memory borrow.
     let cpu_vendor = arch::x86_64::cpu::get_cpu_vendor();

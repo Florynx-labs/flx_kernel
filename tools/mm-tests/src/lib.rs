@@ -20,6 +20,9 @@ pub mod sync {
 
 pub mod mm;
 
+#[path = "../../../kernel/src/mm/heap.rs"]
+pub mod heap;
+
 #[path = "../../../kernel/src/mm/virtual_range.rs"]
 pub mod virtual_range;
 
