@@ -104,15 +104,12 @@ pub enum HeapInitError {
 }
 
 /// Initializes the global kernel heap over its statically reserved 1 MiB arena.
-pub fn init() -> Result<(), HeapInitError> {
+pub fn init(allocator: &KernelHeap) -> Result<(), HeapInitError> {
     // SAFETY: this static BSS region is owned exclusively by the heap for kernel lifetime.
     let start = core::ptr::addr_of_mut!(HEAP_STORAGE.0).cast::<u8>();
     // SAFETY: HEAP_STORAGE is static, writable, and aligned to the page size.
-    unsafe { GLOBAL_HEAP.init_region(start, HEAP_SIZE) }
+    unsafe { allocator.init_region(start, HEAP_SIZE) }
 }
-
-/// Global allocator instance registered by the kernel entry point.
-pub static GLOBAL_HEAP: KernelHeap = KernelHeap::new();
 
 unsafe impl GlobalAlloc for KernelHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -126,26 +123,26 @@ unsafe impl GlobalAlloc for KernelHeap {
 }
 
 /// Smoke test for the live global heap, including alignment and reuse after free.
-pub fn self_test() -> Result<(), &'static str> {
+pub fn self_test(allocator: &KernelHeap) -> Result<(), &'static str> {
     let layout = Layout::from_size_align(96, 32).map_err(|_| "invalid heap test layout")?;
-    let first = GLOBAL_HEAP.allocate(layout);
+    let first = allocator.allocate(layout);
     if first.is_null() {
         return Err("heap allocation failed");
     }
     if (first as usize) % 32 != 0 {
         // SAFETY: first was just returned for this exact layout.
-        unsafe { GLOBAL_HEAP.deallocate(first, layout) };
+        unsafe { allocator.deallocate(first, layout) };
         return Err("heap returned misaligned pointer");
     }
 
     let second_layout = Layout::from_size_align(256, 16).map_err(|_| "invalid heap test layout")?;
-    let second = GLOBAL_HEAP.allocate(second_layout);
+    let second = allocator.allocate(second_layout);
     if second.is_null() || second == first {
         // SAFETY: each non-null pointer was returned by the allocator with the matching layout.
         unsafe {
-            GLOBAL_HEAP.deallocate(first, layout);
+            allocator.deallocate(first, layout);
             if !second.is_null() {
-                GLOBAL_HEAP.deallocate(second, second_layout);
+                allocator.deallocate(second, second_layout);
             }
         }
         return Err("heap returned null or overlapping allocations");
