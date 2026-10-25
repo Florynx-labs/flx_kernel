@@ -12,6 +12,9 @@ pub mod drivers;
 pub mod framebuffer;
 pub mod logging;
 pub mod mm;
+
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mm::heap::KernelHeap = mm::heap::KernelHeap::new();
 pub mod sync;
 
 // panic handler is in its own file and auto-linked as #[panic_handler]
@@ -37,6 +40,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // 0. Interrupts stay off until our own GDT/IDT/PIC are installed: the firmware's
     //    interrupt state and vector mapping must not be trusted.
     arch::x86_64::cpu::disable_interrupts();
+
+    // Initialize the fixed kernel heap before any subsystem can request dynamic memory.
+    // It is backed by a page-aligned, statically mapped 1 MiB BSS arena for this milestone.
+    match mm::heap::init() {
+        Ok(()) => {}
+        Err(error) => {
+            // Serial is initialized immediately below; the boot continues in a restricted mode.
+            core::hint::black_box(error);
+        }
+    }
 
     // 1. Initialize COM1 Serial port first (before any other output).
     drivers::serial::SERIAL1.lock().init();
