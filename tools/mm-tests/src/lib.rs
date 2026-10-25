@@ -19,7 +19,7 @@ pub mod sync {
 }
 
 pub mod mm {
-    #[path = "../../../kernel/src/mm/frame.rs"]
+    #[path = "../../../../kernel/src/mm/frame.rs"]
     pub mod frame;
 }
 
