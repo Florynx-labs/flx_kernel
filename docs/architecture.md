@@ -46,12 +46,12 @@
 |                                                                         |
 |  +--------------------+  +---------------------+  +------------------+  |
 |  | 16550 UART Serial  |  | Framebuffer Console |  | Timers & PIC/APIC|  |
-|  | Driver (COM1)      |  | 8x16 Monospace Font |  | (Milestone v0.2) |  |
+|  | Driver (COM1)      |  | 8x16 Monospace Font |  | (PIC/PIT: v0.2)  |  |
 |  +--------------------+  +---------------------+  +------------------+  |
 |                                                                         |
 |  +-------------------------------------------------------------------+  |
 |  |               x86_64 Architecture Layer (arch/x86_64)             |  |
-|  |        CPUID  |  GDT/IDT (v0.2)  |  Port I/O  |  CPU Control      |  |
+|  |        CPUID  |    GDT/IDT       |  Port I/O  |  CPU Control      |  |
 |  +-------------------------------------------------------------------+  |
 +-------------------------------------------------------------------------+
                                     ^
@@ -69,7 +69,7 @@
 
 ---
 
-## 3. Subsystem Breakdown (Milestone v0.1.0)
+## 3. Subsystem Breakdown (v0.2.0 + v0.3.0 foundations)
 
 | Subsystem | Location | Status | Description |
 |-----------|----------|--------|-------------|
@@ -78,20 +78,31 @@
 | **Framebuffer** | `kernel/src/framebuffer/` | **READY** | Linear RGB/BGR framebuffer console, 8x16 font, text scrolling. |
 | **Logging** | `kernel/src/logging.rs` | **READY** | Dual-output logging (Serial with ANSI colors, FB with RGB colors). |
 | **Panic Handler** | `kernel/src/panic.rs` | **READY** | Lock-safe, halts CPU, outputs location and panic diagnostic banner. |
-| **Sync Primitives**| `kernel/src/sync/` | **READY** | Bare-metal `Spinlock<T>` with atomic acquire-release semantics. |
-| **Arch Support** | `kernel/src/arch/x86_64/` | **READY** | Low-level CPUID identification, interrupt disabling, `hlt` loop. |
+| **Sync Primitives**| `kernel/src/sync/` | **READY** | Bare-metal IRQ-safe `Spinlock<T>` (disables local interrupts while held). |
+| **Arch Support** | `kernel/src/arch/x86_64/` | **READY** | CPUID, port I/O, interrupt control, `hlt` loop. |
+| **GDT / TSS** | `kernel/src/arch/x86_64/gdt.rs` | **READY** | Flat 64-bit segments (kernel/user), TSS with IST stacks for #DF and NMI. |
+| **IDT & Interrupts** | `kernel/src/arch/x86_64/{idt,interrupts}.rs` | **READY** | 256 assembly stubs → uniform `InterruptFrame` → Rust dispatcher; exception dumps; handler registry. Stub table uses PC-relative offsets (PIE-safe). |
+| **PIC** | `kernel/src/drivers/pic.rs` | **READY** | 8259 remapped to vectors 32–47, masking, EOI, spurious IRQ filtering. Local APIC / IO-APIC: **NOT IMPLEMENTED**. |
+| **Timer** | `kernel/src/drivers/pit.rs` | **READY** | PIT channel 0 at 100 Hz, tick counter, uptime. |
+| **Keyboard** | `kernel/src/drivers/keyboard.rs` | **READY** | PS/2 IRQ 1, scancode set 1 US layout, Shift/Caps Lock, ring buffer. |
+| **Physical Memory** | `kernel/src/mm/frame.rs` | **FOUNDATION READY** | Bitmap frame allocator over the UEFI memory map, double-free detection, self-test. |
+| **Paging** | `kernel/src/mm/paging.rs` | **EARLY FOUNDATION** | Reads active CR3; translates 4 KiB / 2 MiB / 1 GiB mappings; maps/unmaps 4 KiB leaves; invalidates TLB. Not yet a complete address-space manager. |
+| **Virtual Range Allocation** | `kernel/src/mm/virtual_range.rs` | **FOUNDATION READY** | Fixed-capacity bitmap allocator for contiguous canonical virtual-page ranges. Reserves addresses only; does not create page mappings. |
+| **Kernel Heap** | `kernel/src/mm/` | **NOT IMPLEMENTED** | Requires a defined safe virtual arena, paging integration, allocation metadata, and failure handling. |
 
 ---
 
 ## 4. Roadmap
 
-* **v0.1.0 (Current)**: UEFI Boot, x86_64, Framebuffer, Serial COM1, Panic Handler, Logging, Memory Map.
-* **v0.2.0**: GDT, IDT, CPU Exceptions, Interrupts (Timer, Keyboard), Physical Frame Allocator.
-* **v0.3.0**: Virtual Memory Paging, Kernel Heap, Dynamic Memory Allocator.
-* **v0.4.0**: Cooperative & Preemptive Scheduler, Tasks, Context Switching.
-* **v0.5.0**: Processes, Threads, User/Kernel Separation, Syscall ABI.
-* **v0.6.0**: VFS, Ramdisk/FAT32, Initial Userspace ("Hello World").
-* **v0.7.0**: FLX Shell, Standard C/Rust Libc, Basic Utilities.
-* **v0.8.0**: Storage & PCI Drivers, VirtIO.
-* **v0.9.0**: Network Stack (Ethernet, ARP, IPv4, UDP, TCP).
-* **v1.0.0**: Multicore SMP, Capabilities Security, FLX OS First Release Candidate.
+* **v0.1.0**: UEFI Boot, x86_64, Framebuffer, Serial COM1, Panic Handler, Logging, Memory Map.
+* **v0.2.0**: GDT, IDT, CPU exceptions, legacy PIC interrupts (timer, keyboard), physical frame allocator.
+* **v0.3.0 (in progress)**: Active paging inspection and 4 KiB map/unmap primitives; virtual-range reservation. Next: safe kernel virtual arena, mapping tests, kernel heap and allocation diagnostics.
+* **v0.4.0**: Task structures, saved CPU contexts, kernel stacks, scheduler design, then cooperative context switching before preemption.
+* **v0.5.0**: User/kernel privilege boundary, per-process address spaces, syscall ABI, process lifecycle and isolation tests.
+* **v0.6.0**: VFS interfaces, initramfs/ramdisk, FAT support and initial user program.
+* **v0.7.0**: FLX init and shell, basic user utilities, user-space runtime and system-call wrappers.
+* **v0.8.0**: PCI enumeration, storage drivers, VirtIO block and console devices, driver model foundations.
+* **v0.9.0**: Network interfaces, Ethernet, ARP, IPv4, ICMP, UDP and TCP with protocol tests.
+* **v1.0.0**: SMP, local APIC/IO-APIC, capability-oriented security foundations, hardening and FLX OS release candidate.
+
+These milestones are a roadmap, not claims that the future subsystems already exist. Each milestone requires automated tests and a successful QEMU boot before it is considered complete.
