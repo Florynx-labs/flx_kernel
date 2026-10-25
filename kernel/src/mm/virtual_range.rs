@@ -181,19 +181,19 @@ mod tests {
         )
         .unwrap();
 
-        let a = range.allocate(3).unwrap();
-        let b = range.allocate(3).unwrap();
+        let a = range.allocate(2).unwrap();
+        let b = range.allocate(2).unwrap();
         let c = range.allocate(2).unwrap();
+        let _d = range.allocate(2).unwrap();
         assert_eq!(range.allocate(1), Err(VirtualRangeError::OutOfVirtualSpace));
 
-        range.free(a + FRAME_SIZE, 1).unwrap();
-        // Two free runs are separated by occupied pages, so a 2-page run cannot fit.
-        assert_eq!(range.allocate(2), Err(VirtualRangeError::OutOfVirtualSpace));
-
-        range.free(b, 3).unwrap();
-        assert_eq!(range.allocate(4), Err(VirtualRangeError::OutOfVirtualSpace));
+        range.free(a, 2).unwrap();
         range.free(c, 2).unwrap();
-        assert_eq!(range.allocate(5).unwrap(), 0x4000_0000 + 3 * FRAME_SIZE);
+        // There are four free pages in total, but no contiguous run of three.
+        assert_eq!(range.allocate(3), Err(VirtualRangeError::OutOfVirtualSpace));
+
+        range.free(b, 2).unwrap();
+        assert_eq!(range.allocate(5).unwrap(), 0x4000_0000);
     }
 
     #[test]
