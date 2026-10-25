@@ -106,7 +106,7 @@ pub enum HeapInitError {
 /// Initializes the global kernel heap over its statically reserved 1 MiB arena.
 pub fn init(allocator: &KernelHeap) -> Result<(), HeapInitError> {
     // SAFETY: this static BSS region is owned exclusively by the heap for kernel lifetime.
-    let start = core::ptr::addr_of_mut!(HEAP_STORAGE.0).cast::<u8>();
+    let start = unsafe { core::ptr::addr_of_mut!(HEAP_STORAGE.0).cast::<u8>() };
     // SAFETY: HEAP_STORAGE is static, writable, and aligned to the page size.
     unsafe { allocator.init_region(start, HEAP_SIZE) }
 }
@@ -150,8 +150,8 @@ pub fn self_test(allocator: &KernelHeap) -> Result<(), &'static str> {
 
     // SAFETY: both pointers are live allocations returned with these exact layouts.
     unsafe {
-        GLOBAL_HEAP.deallocate(first, layout);
-        GLOBAL_HEAP.deallocate(second, second_layout);
+        allocator.deallocate(first, layout);
+        allocator.deallocate(second, second_layout);
     }
     Ok(())
 }
