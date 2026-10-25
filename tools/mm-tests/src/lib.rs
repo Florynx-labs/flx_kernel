@@ -26,5 +26,4 @@ pub mod heap;
 #[path = "../../../kernel/src/mm/virtual_range.rs"]
 pub mod virtual_range;
 
-#[path = "../../../kernel/src/mm/paging.rs"]
-pub mod paging;
+pub use mm::paging;
