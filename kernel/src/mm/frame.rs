@@ -273,3 +273,69 @@ pub fn self_test() -> Result<(), &'static str> {
     }
     Ok(())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::{BitmapFrameAllocator, FrameError, FRAME_SIZE, MIN_PHYS_ADDR};
+
+    fn allocator_with_free_frames(frames: &[usize]) -> BitmapFrameAllocator {
+        let total_frames = 512;
+        let words = total_frames / 64;
+        let mut used = vec![u64::MAX; words];
+        let owned = vec![0u64; words];
+
+        for &frame in frames {
+            used[frame / 64] &= !(1u64 << (frame % 64));
+        }
+
+        BitmapFrameAllocator {
+            bitmap: Box::leak(used.into_boxed_slice()),
+            allocated: Box::leak(owned.into_boxed_slice()),
+            total_frames,
+            free_frames: frames.len(),
+            next_hint: 0,
+        }
+    }
+
+    #[test]
+    fn reserved_used_frame_cannot_be_freed() {
+        let mut allocator = allocator_with_free_frames(&[]);
+        let reserved = 300 * FRAME_SIZE;
+
+        assert!(reserved >= MIN_PHYS_ADDR);
+        assert!(allocator.is_used(300));
+        assert!(!allocator.is_allocated(300));
+        assert_eq!(allocator.deallocate(reserved), Err(FrameError::NotAllocated));
+        assert!(allocator.is_used(300));
+        assert_eq!(allocator.free_frames, 0);
+    }
+
+    #[test]
+    fn allocator_owned_frame_can_be_freed_once() {
+        let mut allocator = allocator_with_free_frames(&[300]);
+        let address = allocator.allocate().expect("one free frame should exist");
+
+        assert_eq!(address, 300 * FRAME_SIZE);
+        assert!(allocator.is_used(300));
+        assert!(allocator.is_allocated(300));
+        assert_eq!(allocator.free_frames, 0);
+
+        allocator.deallocate(address).expect("owned frame should be freed");
+        assert!(!allocator.is_used(300));
+        assert!(!allocator.is_allocated(300));
+        assert_eq!(allocator.free_frames, 1);
+        assert_eq!(allocator.deallocate(address), Err(FrameError::DoubleFree));
+    }
+
+    #[test]
+    fn invalid_free_does_not_change_allocator_state() {
+        let mut allocator = allocator_with_free_frames(&[300]);
+        let before = allocator.free_frames;
+
+        assert_eq!(allocator.deallocate(300 * FRAME_SIZE + 1), Err(FrameError::InvalidAddress));
+        assert_eq!(allocator.deallocate(100 * FRAME_SIZE), Err(FrameError::InvalidAddress));
+        assert_eq!(allocator.free_frames, before);
+        assert!(!allocator.is_used(300));
+    }
+}
