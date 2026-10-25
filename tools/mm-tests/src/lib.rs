@@ -1,15 +1,26 @@
 //! Host-side test harness for pure memory-management algorithms.
-//! This includes the exact virtual-range allocator source used by the kernel.
+//! Kernel source modules are included directly so tests exercise production code.
 
-pub mod mm {
-    pub mod frame {
-        pub const FRAME_SIZE: u64 = 4096;
+pub mod sync {
+    use std::sync::{Mutex, MutexGuard};
 
-        // Host tests exercise pure address logic only; privileged paging paths are never called.
-        pub fn alloc_frame() -> Option<u64> {
-            None
+    /// Host-only stand-in for the kernel spinlock; privileged IRQ operations are not tested here.
+    pub struct Spinlock<T>(Mutex<T>);
+
+    impl<T> Spinlock<T> {
+        pub const fn new(value: T) -> Self {
+            Self(Mutex::new(value))
+        }
+
+        pub fn lock(&self) -> MutexGuard<'_, T> {
+            self.0.lock().expect("host test lock poisoned")
         }
     }
+}
+
+pub mod mm {
+    #[path = "../../../kernel/src/mm/frame.rs"]
+    pub mod frame;
 }
 
 #[path = "../../../kernel/src/mm/virtual_range.rs"]
