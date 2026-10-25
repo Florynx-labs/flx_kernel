@@ -194,6 +194,17 @@ impl ActivePageTable {
             return Err(PagingError::NonCanonicalAddress);
         }
 
+        // Validate every physical frame before changing any page-table entry.
+        // This keeps malformed batches side-effect-free (no map/rollback cycle needed).
+        for physical in physical_frames.iter().copied() {
+            if physical % FRAME_SIZE != 0 {
+                return Err(PagingError::UnalignedAddress);
+            }
+            if physical & !ADDRESS_MASK != 0 {
+                return Err(PagingError::PhysicalAddressOutOfRange);
+            }
+        }
+
         for (index, physical) in physical_frames.iter().copied().enumerate() {
             let offset = u64::try_from(index)
                 .ok()
