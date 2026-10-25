@@ -47,12 +47,12 @@ FLX Kernel is engineered as a foundational technology base designed to evolve in
 - **Interrupts**: 8259 PIC remapped to vectors 32–47 (spurious IRQ handling), PIT system timer at 100 Hz, PS/2 keyboard (scancode set 1, US layout, ring buffer)
 - **Physical memory**: UEFI memory map parsing and a bitmap **physical frame allocator** (4 KiB frames, double-free detection, protection against freeing reserved frames, boot-time self-test)
 - **Virtual memory foundation**: inspect active CR3 tables; translate 4 KiB / 2 MiB / 1 GiB mappings; map and unmap 4 KiB pages; invalidate TLB after edits; propagate writable/user/NX requirements through intermediate entries
-- **Kernel heap (early)**: a thread-safe, first-fit allocator over a page-aligned 1 MiB static arena, with alignment, reuse, exhaustion, and boot-time smoke tests; this initial arena does not grow by mapping frames yet
+- **Kernel heap**: a thread-safe first-fit allocator with a 1 MiB static early arena plus on-demand, zeroed, frame-backed heap arenas mapped into a probed virtual window after the physical frame allocator is ready; bounded arena count and size, allocation routing, and boot-time smoke tests
 - **Virtual range allocator**: fixed-capacity, bitmap-backed contiguous virtual-page reservation with bounds, alignment, canonical-address, and double-free checks; does not map pages by itself
 - **Sync**: IRQ-safe `Spinlock<T>` (local interrupts are disabled while the lock is held)
 - **Tests / CI**: Python source-contract regression tests and Rust host-side memory tests run before the kernel build and headless QEMU/OVMF boot validation
 
-**Not implemented yet**: a dynamically growing frame-backed heap, isolated process address spaces, Local APIC / IO-APIC and SMP, scheduler/context switching, userspace ABI, VFS/filesystems, networking, and a broad driver model. These are planned in staged milestones; the current paging API is an early foundation, not complete virtual memory management.
+**Not implemented yet**: heap arenas are bounded and independently managed (they do not yet form one contiguous expandable heap); isolated process address spaces, Local APIC / IO-APIC and SMP, scheduler/context switching, userspace ABI, VFS/filesystems, networking, and a broad driver model. These are planned in staged milestones; the current paging API is an early foundation, not complete virtual memory management.
 
 ---
 
@@ -124,7 +124,7 @@ cargo test --package flx-mm-tests
 python3 -m unittest discover -s tools/tests -v
 ```
 
-The Rust harness tests the production memory-management modules on the host, including paging permission helpers, virtual-range management, physical frames, and heap allocation. The Python suite guards key physical-frame allocator safety contracts, including ownership tracking, address validation, and free-frame accounting.
+The Rust harness tests the production memory-management modules on the host, including paging permission helpers, virtual-range management, physical frames, heap allocation, and heap growth sizing/initialization. The Python suite guards key physical-frame allocator safety contracts, including ownership tracking, address validation, and free-frame accounting.
 
 ### Headless boot test (same check as CI)
 
