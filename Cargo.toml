@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "kernel",
     "tools/runner",
+    "tools/mm-tests",
 ]
 
 [workspace.package]
