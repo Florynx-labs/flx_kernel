@@ -129,6 +129,22 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         None => kerror!("Frame allocator: no physical memory mapping from bootloader"),
     }
 
+    // 9b. Paging smoke test: inspect the bootloader's active CR3 without replacing it.
+    // This deliberately translates existing kernel text and does not modify live mappings.
+    if let Some(offset) = phys_offset {
+        let active_table = unsafe { mm::paging::ActivePageTable::current(offset) };
+        let probe = kernel_main as usize as u64;
+        match active_table.translate(probe) {
+            Ok(Some(physical)) => kok!(
+                "Paging (active CR3, kernel VA {:#x} -> PA {:#x})",
+                probe,
+                physical
+            ),
+            Ok(None) => kerror!("Paging self-test: kernel entry is not mapped"),
+            Err(e) => kerror!("Paging self-test failed: {:?}", e),
+        }
+    }
+
     // 10. Hardware interrupts: PIC remap, PIT timer (100 Hz), PS/2 keyboard.
     drivers::pic::init();
     drivers::pit::init();
