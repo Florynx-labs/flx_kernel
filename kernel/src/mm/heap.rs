@@ -329,6 +329,37 @@ fn grow_and_allocate(state: &mut HeapState, layout: Layout) -> *mut u8 {
         .map_or(ptr::null_mut(), |allocation| allocation.as_ptr())
 }
 
+/// Forces at least one frame-backed arena to be created and verifies both allocations
+/// remain independently freeable. Run only after growth has been enabled.
+pub fn growth_self_test(allocator: &KernelHeap) -> Result<(), &'static str> {
+    if !allocator.growth_enabled() {
+        return Err("heap growth is not enabled");
+    }
+    let before = allocator.growth_arena_count();
+    let layout = Layout::from_size_align(600 * 1024, 16).map_err(|_| "invalid growth test layout")?;
+    let first = allocator.allocate(layout);
+    if first.is_null() {
+        return Err("first large heap allocation failed");
+    }
+    let second = allocator.allocate(layout);
+    if second.is_null() {
+        // SAFETY: first was returned by this allocator with this exact layout.
+        unsafe { allocator.deallocate(first, layout) };
+        return Err("second large heap allocation failed");
+    }
+
+    let grew = allocator.growth_arena_count() > before;
+    // SAFETY: both pointers were returned by this allocator with this exact layout.
+    unsafe {
+        allocator.deallocate(first, layout);
+        allocator.deallocate(second, layout);
+    }
+    if !grew {
+        return Err("large allocations did not create a frame-backed arena");
+    }
+    Ok(())
+}
+
 /// Smoke test for the live heap, including alignment and reuse after free.
 pub fn self_test(allocator: &KernelHeap) -> Result<(), &'static str> {
     let layout = Layout::from_size_align(96, 32).map_err(|_| "invalid heap test layout")?;
