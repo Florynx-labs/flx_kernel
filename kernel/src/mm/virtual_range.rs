@@ -36,6 +36,13 @@ impl<'a> VirtualRangeAllocator<'a> {
         if end <= start {
             return Err(VirtualRangeError::InvalidRange);
         }
+        let last = end - 1;
+        if !is_canonical(start)
+            || !is_canonical(last)
+            || ((start >> 47) & 1) != ((last >> 47) & 1)
+        {
+            return Err(VirtualRangeError::InvalidRange);
+        }
         let page_count_u64 = (end - start) / FRAME_SIZE;
         let page_count = usize::try_from(page_count_u64).map_err(|_| VirtualRangeError::InvalidRange)?;
         let required_words = page_count.div_ceil(64);
@@ -137,6 +144,13 @@ impl<'a> VirtualRangeAllocator<'a> {
     }
 }
 
+#[inline]
+fn is_canonical(address: u64) -> bool {
+    let upper = address >> 48;
+    let sign = (address >> 47) & 1;
+    if sign == 0 { upper == 0 } else { upper == 0xffff }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{VirtualRangeAllocator, VirtualRangeError};
@@ -172,5 +186,6 @@ mod tests {
         assert_eq!(VirtualRangeAllocator::new(0x1001, 0x3000, &mut small).err(), Some(VirtualRangeError::UnalignedRange));
         assert_eq!(VirtualRangeAllocator::new(0x1000, 0x1000, &mut small).err(), Some(VirtualRangeError::InvalidRange));
         assert_eq!(VirtualRangeAllocator::new(0x1000, 0x1000 + 65 * FRAME_SIZE, &mut small).err(), Some(VirtualRangeError::BitmapTooSmall));
+        assert_eq!(VirtualRangeAllocator::new(0x0000_7fff_ffff_f000, 0xffff_8000_0000_0000, &mut small).err(), Some(VirtualRangeError::InvalidRange));
     }
 }
