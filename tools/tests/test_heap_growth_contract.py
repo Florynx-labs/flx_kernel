@@ -39,7 +39,7 @@ class HeapGrowthContractTests(unittest.TestCase):
     def test_growth_maps_frames_and_releases_them_on_failure(self):
         body = function_body(HEAP, "fn grow_and_allocate(state: &mut HeapState, layout: Layout)")
         self.assertIn("frame::alloc_frame()", body)
-        self.assertIn("page_table.map_4k_range", body)
+        self.assertIn(".map_4k_range(virtual_start", body)
         self.assertIn("PageFlags::KERNEL_DATA", body)
         self.assertIn("frame::free_frame(physical)", body)
         self.assertIn("write_bytes", body)
