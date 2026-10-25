@@ -8,6 +8,8 @@ use core::hint::spin_loop;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use crate::arch::x86_64::cpu;
+
 /// A simple, robust spinlock.
 ///
 /// Wraps protected data in an `UnsafeCell` and uses an atomic boolean flag
@@ -41,7 +43,14 @@ impl<T: ?Sized> Spinlock<T> {
     /// Acquires the lock, spinning until it is available.
     ///
     /// Returns an RAII guard that unlocks when dropped.
+    ///
+    /// Interrupts are disabled on the local core while the lock is held and restored to
+    /// their previous state on drop. This prevents an interrupt handler from deadlocking
+    /// on a lock already held by the code it interrupted (e.g. logging from an IRQ).
     pub fn lock(&self) -> SpinlockGuard<'_, T> {
+        let irq_was_enabled = cpu::interrupts_enabled();
+        cpu::disable_interrupts();
+
         // Spin until we successfully swap false -> true with Acquire ordering.
         while self
             .locked
@@ -54,20 +63,26 @@ impl<T: ?Sized> Spinlock<T> {
             }
         }
 
-        SpinlockGuard { lock: self }
+        SpinlockGuard { lock: self, irq_was_enabled }
     }
 
     /// Attempts to acquire the lock without blocking.
     ///
     /// Returns `Some(guard)` if acquired, or `None` if already locked.
     pub fn try_lock(&self) -> Option<SpinlockGuard<'_, T>> {
+        let irq_was_enabled = cpu::interrupts_enabled();
+        cpu::disable_interrupts();
+
         if self
             .locked
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
         {
-            Some(SpinlockGuard { lock: self })
+            Some(SpinlockGuard { lock: self, irq_was_enabled })
         } else {
+            if irq_was_enabled {
+                cpu::enable_interrupts();
+            }
             None
         }
     }
@@ -93,6 +108,7 @@ impl<T: ?Sized> Spinlock<T> {
 /// When this structure is dropped (falls out of scope), the lock will be unlocked.
 pub struct SpinlockGuard<'a, T: ?Sized> {
     lock: &'a Spinlock<T>,
+    irq_was_enabled: bool,
 }
 
 impl<'a, T: ?Sized> Deref for SpinlockGuard<'a, T> {
@@ -116,5 +132,8 @@ impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T> {
         // Release the lock with Release ordering so all memory operations
         // inside the critical section become visible before the unlock.
         self.lock.locked.store(false, Ordering::Release);
+        if self.irq_was_enabled {
+            cpu::enable_interrupts();
+        }
     }
 }

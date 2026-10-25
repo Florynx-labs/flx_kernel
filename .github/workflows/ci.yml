@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  boot-test:
+    name: Build + boot under QEMU (UEFI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust components
+        run: |
+          rustup show
+          rustup component add llvm-tools-preview rust-src
+
+      - name: Install QEMU
+        timeout-minutes: 8
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends qemu-system-x86
+
+      - name: Build kernel
+        run: |
+          status=0
+          cargo build --package flx-kernel --target x86_64-unknown-none --color never > build.log 2>&1 || status=$?
+          cat build.log
+          if [ "$status" -ne 0 ]; then
+            python3 tools/ci/annotate.py build.log "kernel build failed (exit $status)" 7000
+            exit 1
+          fi
+
+      - name: Boot test
+        env:
+          # The `bootloader` crate's build script uses `-Z build-std`, which needs a nightly
+          # cargo; RUSTC_BOOTSTRAP lets it run on the pinned stable toolchain.
+          RUSTC_BOOTSTRAP: "1"
+        run: tools/ci/check_boot.sh 150
+
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-serial-log
+          path: boot-serial*.log

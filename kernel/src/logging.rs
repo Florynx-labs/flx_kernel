@@ -64,39 +64,39 @@ pub fn log_status(tag: &str, fb_color: Color, serial_ansi: &str, args: fmt::Argu
 /// Logs an "[OK]" status message.
 #[macro_export]
 macro_rules! kok {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::logging::log_status("OK   ", $crate::framebuffer::Color::GREEN, "\x1b[92m", core::format_args!($($arg)*));
-    };
+    }};
 }
 
 /// Logs an "[INFO]" message.
 #[macro_export]
 macro_rules! kinfo {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::logging::log_status("INFO ", $crate::framebuffer::Color::CYAN, "\x1b[96m", core::format_args!($($arg)*));
-    };
+    }};
 }
 
 /// Logs a "[WARN]" warning message.
 #[macro_export]
 macro_rules! kwarn {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::logging::log_status("WARN ", $crate::framebuffer::Color::YELLOW, "\x1b[93m", core::format_args!($($arg)*));
-    };
+    }};
 }
 
 /// Logs an "[ERROR]" error message.
 #[macro_export]
 macro_rules! kerror {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::logging::log_status("ERROR", $crate::framebuffer::Color::RED, "\x1b[91m", core::format_args!($($arg)*));
-    };
+    }};
 }
 
 /// Logs a "[DEBUG]" debug message.
 #[macro_export]
 macro_rules! kdebug {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::logging::log_status("DEBUG", $crate::framebuffer::Color::PURPLE, "\x1b[95m", core::format_args!($($arg)*));
-    };
+    }};
 }
