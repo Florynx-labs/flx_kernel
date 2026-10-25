@@ -252,9 +252,10 @@ fn grow_and_allocate(state: &mut HeapState, layout: Layout) -> *mut u8 {
     let mut chosen = None;
     for _ in 0..VIRTUAL_CANDIDATE_LIMIT {
         let window_end = VIRTUAL_ARENA_START + VIRTUAL_ARENA_WINDOW_SIZE;
-        if candidate.checked_add(arena_size as u64).is_none_or(|end| end > window_end) {
-            break;
-        }
+        let candidate_end = match candidate.checked_add(arena_size as u64) {
+            Some(end) if end <= window_end => end,
+            _ => break,
+        };
         let mut vacant = true;
         for page in 0..page_count {
             let address = candidate + (page * PAGE_SIZE) as u64;
@@ -267,6 +268,8 @@ fn grow_and_allocate(state: &mut HeapState, layout: Layout) -> *mut u8 {
             }
         }
         if vacant {
+            // Keep the checked end calculation explicit for overflow/canonical-range safety.
+            let _ = candidate_end;
             chosen = Some(candidate);
             break;
         }
