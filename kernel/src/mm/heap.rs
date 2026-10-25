@@ -129,12 +129,12 @@ impl KernelHeap {
             return ptr::null_mut();
         }
 
-        if let Some(allocation) = state.heap.allocate_first_fit(layout) {
+        if let Ok(allocation) = state.heap.allocate_first_fit(layout) {
             return allocation.as_ptr();
         }
 
         for arena in state.arenas.iter_mut().filter(|arena| arena.active) {
-            if let Some(allocation) = arena.heap.allocate_first_fit(layout) {
+            if let Ok(allocation) = arena.heap.allocate_first_fit(layout) {
                 return allocation.as_ptr();
             }
         }
