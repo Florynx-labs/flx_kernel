@@ -46,7 +46,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     // Initialize the fixed kernel heap before the remaining subsystems. It is backed by a
     // page-aligned, statically mapped 1 MiB BSS arena for this milestone.
-    let heap_init = mm::heap::init();
+    let heap_init = mm::heap::init(&GLOBAL_ALLOCATOR);
 
     // 2. Identify CPU — pure register read, no memory borrow.
     let cpu_vendor = arch::x86_64::cpu::get_cpu_vendor();
