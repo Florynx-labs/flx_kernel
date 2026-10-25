@@ -41,18 +41,12 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     //    interrupt state and vector mapping must not be trusted.
     arch::x86_64::cpu::disable_interrupts();
 
-    // Initialize the fixed kernel heap before any subsystem can request dynamic memory.
-    // It is backed by a page-aligned, statically mapped 1 MiB BSS arena for this milestone.
-    match mm::heap::init() {
-        Ok(()) => {}
-        Err(error) => {
-            // Serial is initialized immediately below; the boot continues in a restricted mode.
-            core::hint::black_box(error);
-        }
-    }
-
     // 1. Initialize COM1 Serial port first (before any other output).
     drivers::serial::SERIAL1.lock().init();
+
+    // Initialize the fixed kernel heap before the remaining subsystems. It is backed by a
+    // page-aligned, statically mapped 1 MiB BSS arena for this milestone.
+    let heap_init = mm::heap::init();
 
     // 2. Identify CPU — pure register read, no memory borrow.
     let cpu_vendor = arch::x86_64::cpu::get_cpu_vendor();
