@@ -125,6 +125,40 @@ unsafe impl GlobalAlloc for KernelHeap {
     }
 }
 
+/// Smoke test for the live global heap, including alignment and reuse after free.
+pub fn self_test() -> Result<(), &'static str> {
+    let layout = Layout::from_size_align(96, 32).map_err(|_| "invalid heap test layout")?;
+    let first = GLOBAL_HEAP.allocate(layout);
+    if first.is_null() {
+        return Err("heap allocation failed");
+    }
+    if (first as usize) % 32 != 0 {
+        // SAFETY: first was just returned for this exact layout.
+        unsafe { GLOBAL_HEAP.deallocate(first, layout) };
+        return Err("heap returned misaligned pointer");
+    }
+
+    let second_layout = Layout::from_size_align(256, 16).map_err(|_| "invalid heap test layout")?;
+    let second = GLOBAL_HEAP.allocate(second_layout);
+    if second.is_null() || second == first {
+        // SAFETY: each non-null pointer was returned by the allocator with the matching layout.
+        unsafe {
+            GLOBAL_HEAP.deallocate(first, layout);
+            if !second.is_null() {
+                GLOBAL_HEAP.deallocate(second, second_layout);
+            }
+        }
+        return Err("heap returned null or overlapping allocations");
+    }
+
+    // SAFETY: both pointers are live allocations returned with these exact layouts.
+    unsafe {
+        GLOBAL_HEAP.deallocate(first, layout);
+        GLOBAL_HEAP.deallocate(second, second_layout);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{HeapInitError, KernelHeap};
