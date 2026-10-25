@@ -156,6 +156,58 @@ impl ActivePageTable {
         Ok(())
     }
 
+    /// Maps a batch of physical frames into consecutive virtual pages.
+    ///
+    /// If any mapping fails, mappings created by this call are removed before returning
+    /// the original error. Physical frames remain owned by the caller. Intermediate page
+    /// tables created during a failed attempt are currently retained for later reuse.
+    pub fn map_4k_range(
+        &mut self,
+        virtual_start: u64,
+        physical_frames: &[u64],
+        flags: PageFlags,
+    ) -> Result<(), PagingError> {
+        if virtual_start % FRAME_SIZE != 0 {
+            return Err(PagingError::UnalignedAddress);
+        }
+        if !is_canonical(virtual_start) {
+            return Err(PagingError::NonCanonicalAddress);
+        }
+        if physical_frames.is_empty() {
+            return Ok(());
+        }
+
+        let span = u64::try_from(physical_frames.len())
+            .ok()
+            .and_then(|count| count.checked_mul(FRAME_SIZE))
+            .ok_or(PagingError::AddressOverflow)?;
+        let last = virtual_start
+            .checked_add(span - FRAME_SIZE)
+            .ok_or(PagingError::AddressOverflow)?;
+        if !is_canonical(last) || ((virtual_start >> 47) & 1) != ((last >> 47) & 1) {
+            return Err(PagingError::NonCanonicalAddress);
+        }
+
+        for (index, physical) in physical_frames.iter().copied().enumerate() {
+            let offset = u64::try_from(index)
+                .ok()
+                .and_then(|i| i.checked_mul(FRAME_SIZE))
+                .ok_or(PagingError::AddressOverflow)?;
+            let virtual_addr = virtual_start
+                .checked_add(offset)
+                .ok_or(PagingError::AddressOverflow)?;
+            if let Err(error) = self.map_4k(virtual_addr, physical, flags) {
+                for rollback_index in 0..index {
+                    let rollback_offset = (rollback_index as u64) * FRAME_SIZE;
+                    // Best-effort rollback: preserve the mapping error that caused failure.
+                    let _ = self.unmap_4k(virtual_start + rollback_offset);
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// Removes a 4 KiB mapping and returns its physical frame; does not free that frame.
     pub fn unmap_4k(&mut self, virtual_addr: u64) -> Result<u64, PagingError> {
         if virtual_addr % FRAME_SIZE != 0 {
