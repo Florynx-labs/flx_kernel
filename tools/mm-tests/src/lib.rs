@@ -18,10 +18,7 @@ pub mod sync {
     }
 }
 
-pub mod mm {
-    #[path = "../../../../kernel/src/mm/frame.rs"]
-    pub mod frame;
-}
+pub mod mm;
 
 #[path = "../../../kernel/src/mm/virtual_range.rs"]
 pub mod virtual_range;
