@@ -172,6 +172,44 @@ mod tests {
     }
 
     #[test]
+    fn handles_fragmentation_and_exhaustion() {
+        let mut bitmap = [0u64; 1];
+        let mut range = VirtualRangeAllocator::new(
+            0x4000_0000,
+            0x4000_0000 + 8 * FRAME_SIZE,
+            &mut bitmap,
+        )
+        .unwrap();
+
+        let a = range.allocate(3).unwrap();
+        let b = range.allocate(3).unwrap();
+        let c = range.allocate(2).unwrap();
+        assert_eq!(range.allocate(1), Err(VirtualRangeError::OutOfVirtualSpace));
+
+        range.free(a + FRAME_SIZE, 1).unwrap();
+        // Two free runs are separated by occupied pages, so a 2-page run cannot fit.
+        assert_eq!(range.allocate(2), Err(VirtualRangeError::OutOfVirtualSpace));
+
+        range.free(b, 3).unwrap();
+        assert_eq!(range.allocate(4), Err(VirtualRangeError::OutOfVirtualSpace));
+        range.free(c, 2).unwrap();
+        assert_eq!(range.allocate(5).unwrap(), 0x4000_0000 + 3 * FRAME_SIZE);
+    }
+
+    #[test]
+    fn rejects_zero_page_requests() {
+        let mut bitmap = [0u64; 1];
+        let mut range = VirtualRangeAllocator::new(
+            0x5000_0000,
+            0x5000_0000 + 4 * FRAME_SIZE,
+            &mut bitmap,
+        )
+        .unwrap();
+        assert_eq!(range.allocate(0), Err(VirtualRangeError::ZeroPages));
+        assert_eq!(range.free(0x5000_0000, 0), Err(VirtualRangeError::ZeroPages));
+    }
+
+    #[test]
     fn validates_range_and_bitmap() {
         let mut small = [0u64; 1];
         assert_eq!(VirtualRangeAllocator::new(0x1001, 0x3000, &mut small).err(), Some(VirtualRangeError::UnalignedRange));
