@@ -23,7 +23,6 @@ pub struct VirtualRangeAllocator<'a> {
     start: u64,
     page_count: usize,
     bitmap: &'a mut [u64],
-    next_hint: usize,
 }
 
 impl<'a> VirtualRangeAllocator<'a> {
@@ -50,7 +49,7 @@ impl<'a> VirtualRangeAllocator<'a> {
             return Err(VirtualRangeError::BitmapTooSmall);
         }
         bitmap.fill(0);
-        Ok(Self { start, page_count, bitmap, next_hint: 0 })
+        Ok(Self { start, page_count, bitmap })
     }
 
     /// Reserves pages contiguous virtual pages and returns their starting address.
@@ -62,26 +61,19 @@ impl<'a> VirtualRangeAllocator<'a> {
             return Err(VirtualRangeError::OutOfVirtualSpace);
         }
 
-        for pass in 0..2 {
-            let begin = if pass == 0 { self.next_hint.min(self.page_count) } else { 0 };
-            let end = if pass == 0 { self.page_count } else { self.next_hint.min(self.page_count) };
-            if begin >= end { continue; }
-
-            let mut run_start = begin;
-            let mut run_len = 0usize;
-            for page in begin..end {
-                if self.is_used(page) {
-                    run_start = page + 1;
-                    run_len = 0;
-                } else {
-                    run_len += 1;
-                    if run_len == pages {
-                        for allocated in run_start..run_start + pages {
-                            self.set_used(allocated, true);
-                        }
-                        self.next_hint = run_start + pages;
-                        return self.address_of(run_start);
+        let mut run_start = 0usize;
+        let mut run_len = 0usize;
+        for page in 0..self.page_count {
+            if self.is_used(page) {
+                run_start = page + 1;
+                run_len = 0;
+            } else {
+                run_len += 1;
+                if run_len == pages {
+                    for allocated in run_start..run_start + pages {
+                        self.set_used(allocated, true);
                     }
+                    return self.address_of(run_start);
                 }
             }
         }
@@ -108,7 +100,6 @@ impl<'a> VirtualRangeAllocator<'a> {
         for page in first..end {
             self.set_used(page, false);
         }
-        self.next_hint = self.next_hint.min(first);
         Ok(())
     }
 
