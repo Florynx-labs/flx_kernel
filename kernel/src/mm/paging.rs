@@ -47,6 +47,7 @@ pub enum PagingError {
     NotMapped,
     HugePageConflict,
     InvalidPageTable,
+    NxNotEnabled,
 }
 
 /// Handle to the currently active four-level x86_64 page tables.
@@ -117,6 +118,11 @@ impl ActivePageTable {
         }
         if physical_addr & !ADDRESS_MASK != 0 {
             return Err(PagingError::PhysicalAddressOutOfRange);
+        }
+        // Setting bit 63 in a PTE is reserved unless EFER.NXE is enabled.
+        // Fail safely rather than turning an ordinary mapping into a reserved-bit fault.
+        if flags.no_execute && !nx_enabled() {
+            return Err(PagingError::NxNotEnabled);
         }
 
         let idx = indices(virtual_addr);
@@ -252,6 +258,57 @@ impl ActivePageTable {
         }
         Ok(virtual_addr as *mut u8)
     }
+}
+
+/// Returns whether the processor has NX support and the kernel has enabled EFER.NXE.
+#[inline]
+fn nx_enabled() -> bool {
+    let max_extended: u32;
+    unsafe {
+        core::arch::asm!(
+            "push rbx",
+            "cpuid",
+            "pop rbx",
+            inout("eax") 0x8000_0000u32 => max_extended,
+            lateout("ecx") _,
+            lateout("edx") _,
+            options(preserves_flags)
+        );
+    }
+    if max_extended < 0x8000_0001 {
+        return false;
+    }
+
+    let extended_features_edx: u32;
+    unsafe {
+        core::arch::asm!(
+            "push rbx",
+            "cpuid",
+            "pop rbx",
+            inout("eax") 0x8000_0001u32 => _,
+            lateout("ecx") _,
+            lateout("edx") extended_features_edx,
+            options(preserves_flags)
+        );
+    }
+    const CPUID_NX: u32 = 1 << 20;
+    if extended_features_edx & CPUID_NX == 0 {
+        return false;
+    }
+
+    let efer_low: u32;
+    let efer_high: u32;
+    unsafe {
+        core::arch::asm!(
+            "rdmsr",
+            in("ecx") 0xC000_0080u32,
+            out("eax") efer_low,
+            out("edx") efer_high,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    let efer = ((efer_high as u64) << 32) | efer_low as u64;
+    efer & (1 << 11) != 0
 }
 
 #[inline]
