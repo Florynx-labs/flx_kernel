@@ -145,8 +145,13 @@ impl ActivePageTable {
                 if (level == 1 || level == 2) && current & HUGE_PAGE != 0 {
                     return Err(PagingError::HugePageConflict);
                 }
-                if flags.user && current & USER == 0 {
-                    unsafe { write_volatile(entry, current | USER | WRITABLE); }
+                // Intermediate entries participate in effective permissions. A writable or
+                // user leaf cannot override restrictive parent bits, and a parent NX bit
+                // would make an executable leaf unusable. Relax only the parent bits required
+                // by this mapping; the leaf continues to enforce its own permissions.
+                let updated = merge_parent_flags(current, flags);
+                if updated != current {
+                    unsafe { write_volatile(entry, updated); }
                 }
                 table_phys = current & ADDRESS_MASK;
             }
@@ -323,6 +328,21 @@ fn nx_enabled() -> bool {
 }
 
 #[inline]
+fn merge_parent_flags(entry: u64, flags: PageFlags) -> u64 {
+    let mut updated = entry;
+    if flags.writable {
+        updated |= WRITABLE;
+    }
+    if flags.user {
+        updated |= USER;
+    }
+    if !flags.no_execute {
+        updated &= !NO_EXECUTE;
+    }
+    updated
+}
+
+#[inline]
 fn indices(address: u64) -> [usize; 4] {
     [
         ((address >> 39) & 0x1ff) as usize,
@@ -356,13 +376,30 @@ fn flush_tlb_page(address: u64) {
 
 #[cfg(test)]
 mod tests {
-    use super::{indices, is_canonical};
+    use super::{indices, is_canonical, merge_parent_flags, PageFlags, NO_EXECUTE, USER, WRITABLE};
 
     #[test]
     fn splits_virtual_address_into_four_indices() {
         assert_eq!(indices(0), [0, 0, 0, 0]);
         assert_eq!(indices(0x0000_7fff_ffff_f000), [255, 511, 511, 511]);
         assert_eq!(indices(0xffff_8000_0000_0000), [256, 0, 0, 0]);
+    }
+
+    #[test]
+    fn parent_permissions_allow_requested_leaf_access() {
+        let restrictive = NO_EXECUTE;
+        let flags = PageFlags { writable: true, user: true, no_execute: false };
+        let updated = merge_parent_flags(restrictive, flags);
+        assert_ne!(updated & WRITABLE, 0);
+        assert_ne!(updated & USER, 0);
+        assert_eq!(updated & NO_EXECUTE, 0);
+    }
+
+    #[test]
+    fn data_mapping_does_not_weaken_execute_permission() {
+        let flags = PageFlags::KERNEL_DATA;
+        let updated = merge_parent_flags(WRITABLE | NO_EXECUTE, flags);
+        assert_ne!(updated & NO_EXECUTE, 0);
     }
 
     #[test]
