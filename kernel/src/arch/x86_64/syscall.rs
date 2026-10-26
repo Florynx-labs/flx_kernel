@@ -114,4 +114,6 @@ mod tests {
         dispatch(&mut f);
         assert_eq!(f.rax as i64, EINVAL);
     }
+
+    #[test] fn exit_request_sets_flag_and_returns_zero(){let mut f=frame(SYS_EXIT);dispatch(&mut f);assert_eq!(f.rax,0);assert!(initial_task_exited());}
 }
