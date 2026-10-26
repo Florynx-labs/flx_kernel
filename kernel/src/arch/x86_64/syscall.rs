@@ -122,4 +122,6 @@ mod tests {
     #[test] fn write_accepts_stderr_descriptor_before_pointer_validation(){let mut f=frame(SYS_WRITE);f.rdi=2;f.rsi=0;f.rdx=1;dispatch(&mut f);assert_eq!(f.rax as i64,EFAULT);}
 
     #[test] fn write_rejects_bad_descriptor_before_length(){let mut f=frame(SYS_WRITE);f.rdi=3;f.rdx=u64::MAX;dispatch(&mut f);assert_eq!(f.rax as i64,EBADF);}
+
+    #[test] fn getpid_ignores_argument_registers(){let mut f=frame(SYS_GETPID);f.rdi=u64::MAX;f.rsi=0xdead_beef;f.rdx=1024;dispatch(&mut f);assert_eq!(f.rax,1);}
 }
