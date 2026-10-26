@@ -266,4 +266,63 @@ mod tests {
         bytes[ph..ph + 4].copy_from_slice(&PT_INTERP.to_le_bytes());
         assert_eq!(ElfImage::parse(&bytes), Err(ElfError::UnsupportedProgramHeader));
     }
+    #[test]
+    fn rejects_program_header_table_outside_file() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        bytes[32..40].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::ProgramHeaderTableOutOfBounds));
+    }
+
+    #[test]
+    fn rejects_empty_program_header_table() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        bytes[56..58].copy_from_slice(&0u16.to_le_bytes());
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::EmptyProgramHeaderTable));
+    }
+
+    #[test]
+    fn rejects_non_power_of_two_segment_alignment() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        let ph = ELF_HEADER_SIZE;
+        bytes[ph + 48..ph + 56].copy_from_slice(&3u64.to_le_bytes());
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::InvalidAlignment));
+    }
+
+    #[test]
+    fn rejects_segment_virtual_address_overflow_or_kernel_range() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        let ph = ELF_HEADER_SIZE;
+        bytes[ph + 16..ph + 24].copy_from_slice(&0x7fff_ffff_ffffu64.to_le_bytes());
+        bytes[ph + 40..ph + 48].copy_from_slice(&2u64.to_le_bytes());
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::SegmentOutOfBounds));
+    }
+
+    #[test]
+    fn rejects_images_exceeding_page_budget() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        let ph = ELF_HEADER_SIZE;
+        bytes[ph + 40..ph + 48]
+            .copy_from_slice(&((MAX_IMAGE_PAGES + 1) * PAGE_SIZE).to_le_bytes());
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::ImageTooLarge));
+    }
+
+    #[test]
+    fn rejects_file_offset_addition_overflow() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        let ph = ELF_HEADER_SIZE;
+        bytes[ph + 8..ph + 16].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[ph + 32..ph + 40].copy_from_slice(&1u64.to_le_bytes());
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::SegmentOutOfBounds));
+    }
+
+    #[test]
+    fn rejects_unsupported_elf_class_and_endian() {
+        let mut bytes = minimal_elf(PF_R | PF_X);
+        bytes[4] = 1;
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::UnsupportedClass));
+        bytes[4] = 2;
+        bytes[5] = 2;
+        assert_eq!(ElfImage::parse(&bytes), Err(ElfError::UnsupportedEndian));
+    }
+
 }
