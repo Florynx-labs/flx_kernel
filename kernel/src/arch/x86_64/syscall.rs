@@ -118,4 +118,6 @@ mod tests {
     #[test] fn exit_request_sets_flag_and_returns_zero(){let mut f=frame(SYS_EXIT);dispatch(&mut f);assert_eq!(f.rax,0);assert!(initial_task_exited());}
 
     #[test] fn write_rejects_unmapped_user_buffer(){let mut f=frame(SYS_WRITE);f.rdi=1;f.rsi=0;f.rdx=1;dispatch(&mut f);assert_eq!(f.rax as i64,EFAULT);}
+
+    #[test] fn write_accepts_stderr_descriptor_before_pointer_validation(){let mut f=frame(SYS_WRITE);f.rdi=2;f.rsi=0;f.rdx=1;dispatch(&mut f);assert_eq!(f.rax as i64,EFAULT);}
 }
