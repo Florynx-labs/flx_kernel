@@ -135,6 +135,18 @@ The Rust harness tests the production memory-management modules on the host, inc
 RUSTC_BOOTSTRAP=1 tools/ci/check_boot.sh 150
 ```
 
+### Ring 3 ELF smoke test (opt-in)
+
+Run a minimal static ELF in Ring 3 under QEMU and verify that its `int 0x80` `write`
+syscall emits `FLX USERSPACE: PASS` to COM1:
+
+```bash
+RUSTC_BOOTSTRAP=1 tools/ci/check_userspace_smoke.sh 150
+```
+
+This is a bring-up test, not a process manager: the payload spins after writing and the
+current `SYS_EXIT` path does not yet switch back to the kernel scheduler.
+
 ### Build UEFI disk image only (no QEMU launch)
 
 ```bash
