@@ -353,4 +353,6 @@ mod tests {
     #[test] fn rejects_segment_below_user_minimum(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[24..32].copy_from_slice(&0x1000u64.to_le_bytes());b[p+16..p+24].copy_from_slice(&0x1000u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
 
     #[test] fn rejects_segment_above_user_address_limit(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;let a=0x0000_8000_0000_0000u64;b[24..32].copy_from_slice(&a.to_le_bytes());b[p+16..p+24].copy_from_slice(&a.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
+
+    #[test] fn rejects_virtual_address_addition_overflow(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+16..p+24].copy_from_slice(&(u64::MAX-1).to_le_bytes());b[p+40..p+48].copy_from_slice(&3u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
 }
