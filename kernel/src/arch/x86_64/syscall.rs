@@ -128,4 +128,6 @@ mod tests {
     #[test] fn unknown_syscall_preserves_argument_registers(){let mut f=frame(u64::MAX);f.rdi=0x1111;f.rsi=0x2222;f.rdx=0x3333;dispatch(&mut f);assert_eq!(f.rax as i64,ENOSYS);assert_eq!(f.rdi,0x1111);assert_eq!(f.rsi,0x2222);assert_eq!(f.rdx,0x3333);}
 
     #[test] fn write_returns_efault_without_active_process(){let mut f=frame(SYS_WRITE);f.rdi=1;f.rsi=0x400000;f.rdx=8;dispatch(&mut f);assert_eq!(f.rax as i64,EFAULT);}
+
+    #[test] fn write_rejects_length_just_over_limit(){let mut f=frame(SYS_WRITE);f.rdi=1;f.rdx=(MAX_WRITE_BYTES+1) as u64;dispatch(&mut f);assert_eq!(f.rax as i64,EINVAL);}
 }
