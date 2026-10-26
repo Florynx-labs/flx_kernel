@@ -333,4 +333,6 @@ mod tests {
     #[test] fn rejects_bad_ident_version(){let mut b=minimal_elf(PF_R|PF_X);b[6]=0;assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedVersion));}
 
     #[test] fn rejects_bad_header_version(){let mut b=minimal_elf(PF_R|PF_X);b[20..24].copy_from_slice(&2u32.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedVersion));}
+
+    #[test] fn rejects_wrong_header_size(){let mut b=minimal_elf(PF_R|PF_X);b[52..54].copy_from_slice(&63u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidHeaderSize));}
 }
