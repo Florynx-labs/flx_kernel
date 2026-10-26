@@ -325,4 +325,44 @@ mod tests {
         assert_eq!(ElfImage::parse(&bytes), Err(ElfError::UnsupportedEndian));
     }
 
+
+    #[test] fn rejects_wrong_elf_type(){let mut b=minimal_elf(PF_R|PF_X);b[16..18].copy_from_slice(&3u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedType));}
+
+    #[test] fn rejects_wrong_machine(){let mut b=minimal_elf(PF_R|PF_X);b[18..20].copy_from_slice(&3u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedMachine));}
+
+    #[test] fn rejects_bad_ident_version(){let mut b=minimal_elf(PF_R|PF_X);b[6]=0;assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedVersion));}
+
+    #[test] fn rejects_bad_header_version(){let mut b=minimal_elf(PF_R|PF_X);b[20..24].copy_from_slice(&2u32.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedVersion));}
+
+    #[test] fn rejects_wrong_header_size(){let mut b=minimal_elf(PF_R|PF_X);b[52..54].copy_from_slice(&63u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidHeaderSize));}
+
+    #[test] fn rejects_wrong_program_header_size(){let mut b=minimal_elf(PF_R|PF_X);b[54..56].copy_from_slice(&55u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidProgramHeaderSize));}
+
+    #[test] fn rejects_too_many_program_headers(){let mut b=minimal_elf(PF_R|PF_X);b[56..58].copy_from_slice(&((MAX_LOAD_SEGMENTS+1) as u16).to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::TooManyProgramHeaders));}
+
+    #[test] fn rejects_no_loadable_segments(){let mut b=minimal_elf(PF_R|PF_X);b[ELF_HEADER_SIZE..ELF_HEADER_SIZE+4].copy_from_slice(&0u32.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::NoLoadableSegments));}
+
+    #[test] fn rejects_zero_memory_size(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+40..p+48].copy_from_slice(&0u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
+
+    #[test] fn rejects_file_size_larger_than_memory_size(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+32..p+40].copy_from_slice(&2u64.to_le_bytes());b[p+40..p+48].copy_from_slice(&1u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
+
+    #[test] fn rejects_segment_without_read_permission(){let b=minimal_elf(PF_X);assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
+
+    #[test] fn rejects_unknown_segment_flags(){let b=minimal_elf(PF_R|PF_X|0x10);assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
+
+    #[test] fn rejects_segment_below_user_minimum(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[24..32].copy_from_slice(&0x1000u64.to_le_bytes());b[p+16..p+24].copy_from_slice(&0x1000u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
+
+    #[test] fn rejects_segment_above_user_address_limit(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;let a=0x0000_8000_0000_0000u64;b[24..32].copy_from_slice(&a.to_le_bytes());b[p+16..p+24].copy_from_slice(&a.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
+
+    #[test] fn rejects_virtual_address_addition_overflow(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+16..p+24].copy_from_slice(&(u64::MAX-1).to_le_bytes());b[p+40..p+48].copy_from_slice(&3u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
+
+    #[test] fn rejects_file_virtual_page_offset_mismatch(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+8..p+16].copy_from_slice(&1u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidAlignment));}
+
+    #[test] fn accepts_zero_file_size_bss_segment(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+32..p+40].copy_from_slice(&0u64.to_le_bytes());b[p+40..p+48].copy_from_slice(&16u64.to_le_bytes());assert!(ElfImage::parse(&b).is_ok());}
+
+    #[test] fn accepts_alignment_one(){let b=minimal_elf(PF_R|PF_X);let i=ElfImage::parse(&b).unwrap();assert_eq!(i.segments()[0].alignment,1);}
+
+    #[test] fn rejects_dynamic_program_header(){let mut b=minimal_elf(PF_R|PF_X);b[ELF_HEADER_SIZE..ELF_HEADER_SIZE+4].copy_from_slice(&PT_DYNAMIC.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedProgramHeader));}
+
+    #[test] fn rejects_tls_program_header(){let mut b=minimal_elf(PF_R|PF_X);b[ELF_HEADER_SIZE..ELF_HEADER_SIZE+4].copy_from_slice(&PT_TLS.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedProgramHeader));}
 }

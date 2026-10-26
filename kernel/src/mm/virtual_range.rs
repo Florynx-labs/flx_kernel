@@ -217,4 +217,22 @@ mod tests {
         assert_eq!(VirtualRangeAllocator::new(0x1000, 0x1000 + 65 * FRAME_SIZE, &mut small).err(), Some(VirtualRangeError::BitmapTooSmall));
         assert_eq!(VirtualRangeAllocator::new(0x0000_7fff_ffff_f000, 0xffff_8000_0000_0000, &mut small).err(), Some(VirtualRangeError::InvalidRange));
     }
+
+    #[test] fn rejects_unaligned_range_end(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x1000,0x2001,&mut b).err(),Some(VirtualRangeError::UnalignedRange));}
+
+    #[test] fn rejects_reversed_range(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x3000,0x2000,&mut b).err(),Some(VirtualRangeError::InvalidRange));}
+
+    #[test] fn rejects_noncanonical_start_address(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x0000_8000_0000_0000,0x0000_8000_0000_1000,&mut b).err(),Some(VirtualRangeError::InvalidRange));}
+
+    #[test] fn rejects_freeing_unaligned_address(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0x6000_0000,0x6000_0000+4*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.free(0x6000_0001,1),Err(VirtualRangeError::OutOfRange));}
+
+    #[test] fn rejects_free_before_managed_range(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0x7000_0000,0x7000_0000+4*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.free(0x7000_0000-FRAME_SIZE,1),Err(VirtualRangeError::OutOfRange));}
+
+    #[test] fn rejects_free_range_overflow(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0x8000_0000,0x8000_0000+4*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.free(0x8000_0000,usize::MAX),Err(VirtualRangeError::OutOfRange));}
+
+    #[test] fn reports_capacity_and_usage(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0x9000_0000,0x9000_0000+6*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.capacity_pages(),6);assert_eq!(r.used_pages(),0);r.allocate(4).unwrap();assert_eq!(r.used_pages(),4);}
+
+    #[test] fn allocates_across_bitmap_word_boundary(){let mut b=[0u64;2];let s=0xb000_0000;let mut r=VirtualRangeAllocator::new(s,s+70*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.allocate(65).unwrap(),s);assert_eq!(r.allocate(5).unwrap(),s+65*FRAME_SIZE);assert_eq!(r.used_pages(),70);}
+
+    #[test] fn rejects_request_larger_than_capacity(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0xc000_0000,0xc000_0000+8*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.allocate(9),Err(VirtualRangeError::OutOfVirtualSpace));}
 }
