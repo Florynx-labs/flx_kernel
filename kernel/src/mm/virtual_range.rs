@@ -223,4 +223,6 @@ mod tests {
     #[test] fn rejects_reversed_range(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x3000,0x2000,&mut b).err(),Some(VirtualRangeError::InvalidRange));}
 
     #[test] fn rejects_noncanonical_start_address(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x0000_8000_0000_0000,0x0000_8000_0000_1000,&mut b).err(),Some(VirtualRangeError::InvalidRange));}
+
+    #[test] fn rejects_freeing_unaligned_address(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0x6000_0000,0x6000_0000+4*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.free(0x6000_0001,1),Err(VirtualRangeError::OutOfRange));}
 }
