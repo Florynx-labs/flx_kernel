@@ -84,6 +84,21 @@ fn tss_descriptor(base: u64, limit: u32) -> (u64, u64) {
     (low, high)
 }
 
+/// Sets the ring-0 stack used by the CPU when an interrupt arrives from Ring 3.
+ ///
+ /// The stack must be mapped supervisor-only in every address space and remain valid
+ /// for the lifetime of user execution.
+ ///
+ /// # Safety
+ /// `stack_top` must be the 16-byte-aligned top of a writable, mapped kernel stack.
+pub unsafe fn set_kernel_stack_top(stack_top: u64) {
+    if stack_top == 0 || stack_top & 0xF != 0 {
+        return;
+    }
+    // SAFETY: Caller guarantees a valid kernel stack; this setter is used before entering Ring 3.
+    unsafe { core::ptr::addr_of_mut!(TSS).cast::<u8>().add(4).cast::<u64>().write_unaligned(stack_top); }
+}
+
 /// Builds, loads the GDT and TSS, and reloads all segment registers.
 ///
 /// Must be called exactly once on the boot CPU, before the IDT is loaded.
