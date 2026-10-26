@@ -125,6 +125,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     arch::x86_64::gdt::init();
     kok!("GDT + TSS (IST: double fault, NMI)");
     arch::x86_64::idt::init();
+    arch::x86_64::syscall::init();
     arch::x86_64::interrupts::trigger_breakpoint();
     kok!("IDT + CPU exceptions (breakpoint self-test)");
 
