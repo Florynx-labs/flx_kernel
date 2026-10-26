@@ -77,7 +77,7 @@ pub fn init() {
                 _ => 0,
             };
             // Breakpoint (#BP, int3) may be raised from user mode later on.
-            let user_callable = vector == 3;
+            let user_callable = vector == 3 || vector == super::syscall::SYSCALL_VECTOR as usize;
             (*idt).0[vector] =
                 IdtEntry::interrupt_gate(isr_stub_address(vector), ist, user_callable);
         }
