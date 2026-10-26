@@ -441,6 +441,70 @@ impl AddressSpace {
         Ok(())
     }
 
+    /// Validates that every page touched by a user range belongs to this address space.
+    ///
+    /// Empty ranges are accepted without dereferencing the address. Non-empty ranges must stay
+    /// entirely within the canonical lower-half user range and every page must be mapped by this
+    /// AddressSpace instance.
+    pub fn validate_user_range(&self, virtual_addr: u64, length: usize) -> Result<(), PagingError> {
+        if length == 0 {
+            return Ok(());
+        }
+        let length_u64 = u64::try_from(length).map_err(|_| PagingError::AddressOverflow)?;
+        let end = virtual_addr.checked_add(length_u64).ok_or(PagingError::AddressOverflow)?;
+        if virtual_addr < USER_MIN_ADDRESS || end > USER_ADDRESS_LIMIT || end <= virtual_addr {
+            return Err(PagingError::NonCanonicalAddress);
+        }
+
+        let first_page = virtual_addr & !(FRAME_SIZE - 1);
+        let last_page = (end - 1) & !(FRAME_SIZE - 1);
+        let mut page = first_page;
+        loop {
+            if !self.mapped_pages[..self.mapped_count].contains(&page) {
+                return Err(PagingError::NotMapped);
+            }
+            if page == last_page {
+                break;
+            }
+            page = page.checked_add(FRAME_SIZE).ok_or(PagingError::AddressOverflow)?;
+        }
+        Ok(())
+    }
+
+    /// Copies bytes from mapped user memory into a kernel-owned destination buffer.
+    ///
+    /// This reads through the physical-memory mapping, so a user-controlled pointer is never
+    /// directly dereferenced by the kernel. The destination must be a valid writable kernel slice.
+    pub fn read_user_bytes(
+        &self,
+        virtual_addr: u64,
+        destination: &mut [u8],
+    ) -> Result<(), PagingError> {
+        if destination.is_empty() {
+            return Ok(());
+        }
+        self.validate_user_range(virtual_addr, destination.len())?;
+        let table = ActivePageTable { root_phys: self.root_phys, phys_offset: self.phys_offset };
+        let mut copied = 0usize;
+        while copied < destination.len() {
+            let current = virtual_addr
+                .checked_add(copied as u64)
+                .ok_or(PagingError::AddressOverflow)?;
+            let physical = table.translate(current)?.ok_or(PagingError::NotMapped)?;
+            let remaining_in_page = (FRAME_SIZE - (physical & (FRAME_SIZE - 1))) as usize;
+            let count = core::cmp::min(remaining_in_page, destination.len() - copied);
+            let source = table.phys_ptr(physical)?;
+            // SAFETY: validate_user_range checked ownership of every user page, translation
+            // resolves through this address space, and destination is a valid mutable slice.
+            // copy (not copy_nonoverlapping) also tolerates an unusual aliasing destination.
+            unsafe {
+                core::ptr::copy(source, destination.as_mut_ptr().add(copied), count);
+            }
+            copied += count;
+        }
+        Ok(())
+    }
+
     /// Switches CR3 to this address space.
     ///
     /// # Safety
