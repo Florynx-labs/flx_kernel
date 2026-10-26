@@ -320,10 +320,15 @@ impl AddressSpace {
                 return Err(error);
             }
         };
-        // Copy only supervisor/kernel PML4 entries. Lower-half entries remain empty and private.
-        for index in (ENTRY_COUNT / 2)..ENTRY_COUNT {
+        // Preserve every supervisor mapping needed while running kernel code after CR3 switches.
+        // This kernel currently executes from a lower-half virtual address (around 1 TiB), so
+        // copying only the upper half drops the kernel text/data and the Ring 0 interrupt stack.
+        // User mappings are not copied: only present supervisor PML4 entries are inherited.
+        for index in 0..ENTRY_COUNT {
             let entry = unsafe { read_volatile(&(*source)[index]) };
-            unsafe { write_volatile(&mut (*root_ptr)[index], entry & !USER); }
+            if entry & PRESENT != 0 && entry & USER == 0 {
+                unsafe { write_volatile(&mut (*root_ptr)[index], entry); }
+            }
         }
 
         Ok(Self {
