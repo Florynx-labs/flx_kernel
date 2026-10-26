@@ -352,12 +352,15 @@ impl AddressSpace {
         self.map_zeroed_user_page_with_flags(virtual_addr, PageFlags::USER_CODE)
     }
 
-    fn map_zeroed_user_page_with_flags(
+    pub fn map_zeroed_user_page_with_flags(
         &mut self,
         virtual_addr: u64,
         flags: PageFlags,
     ) -> Result<(), PagingError> {
         validate_user_page_address(virtual_addr)?;
+        if !flags.user || (flags.writable && !flags.no_execute) {
+            return Err(PagingError::InvalidPageTable);
+        }
         if self.mapped_count == MAX_USER_PAGES {
             return Err(PagingError::OutOfFrames);
         }
@@ -407,6 +410,34 @@ impl AddressSpace {
         self.mapped_count -= 1;
         self.mapped_pages[index] = self.mapped_pages[self.mapped_count];
         self.mapped_pages[self.mapped_count] = 0;
+        Ok(())
+    }
+
+    /// Copies bytes into already-mapped user pages through the physical-memory mapping.
+    /// This deliberately bypasses user page write permissions only from kernel context.
+    pub fn write_user_bytes(&mut self, virtual_addr: u64, source: &[u8]) -> Result<(), PagingError> {
+        if source.is_empty() { return Ok(()); }
+        let end = virtual_addr.checked_add(source.len() as u64).ok_or(PagingError::AddressOverflow)?;
+        if virtual_addr < USER_MIN_ADDRESS || end > USER_ADDRESS_LIMIT || end <= virtual_addr {
+            return Err(PagingError::NonCanonicalAddress);
+        }
+        let table = ActivePageTable { root_phys: self.root_phys, phys_offset: self.phys_offset };
+        let mut copied = 0usize;
+        while copied < source.len() {
+            let current = virtual_addr.checked_add(copied as u64).ok_or(PagingError::AddressOverflow)?;
+            let page = current & !(FRAME_SIZE - 1);
+            if !self.mapped_pages[..self.mapped_count].contains(&page) {
+                return Err(PagingError::NotMapped);
+            }
+            let physical = table.translate(current)?.ok_or(PagingError::NotMapped)?;
+            let physical_page_remaining = (FRAME_SIZE - (physical & (FRAME_SIZE - 1))) as usize;
+            let count = core::cmp::min(physical_page_remaining, source.len() - copied);
+            let destination = table.phys_ptr(physical)?;
+            // SAFETY: destination is a mapped physical frame owned by this address space;
+            // source and destination are valid for count bytes and may not overlap.
+            unsafe { core::ptr::copy_nonoverlapping(source.as_ptr().add(copied), destination, count); }
+            copied += count;
+        }
         Ok(())
     }
 
