@@ -1,4 +1,7 @@
-//! Host harness module exposing the production physical frame allocator.
+//! Host harness module exposing production memory-management modules.
+#[path = "../../../../kernel/src/mm/elf.rs"]
+pub mod elf;
+
 #[path = "../../../../kernel/src/mm/frame.rs"]
 pub mod frame;
 
