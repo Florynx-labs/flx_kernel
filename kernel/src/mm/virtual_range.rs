@@ -239,4 +239,6 @@ mod tests {
     #[test] fn allocates_exact_full_capacity(){let mut b=[0u64;1];let s=0xd000_0000;let mut r=VirtualRangeAllocator::new(s,s+64*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.allocate(64).unwrap(),s);assert_eq!(r.used_pages(),64);assert_eq!(r.allocate(1),Err(VirtualRangeError::OutOfVirtualSpace));}
 
     #[test] fn failed_partial_free_preserves_allocations(){let mut b=[0u64;1];let s=0xe000_0000;let mut r=VirtualRangeAllocator::new(s,s+8*FRAME_SIZE,&mut b).unwrap();r.allocate(2).unwrap();assert_eq!(r.free(s,3),Err(VirtualRangeError::AlreadyFree));assert_eq!(r.used_pages(),2);}
+
+    #[test] fn allocates_first_fit_after_fragmentation(){let mut b=[0u64;1];let s=0xf000_0000;let mut r=VirtualRangeAllocator::new(s,s+8*FRAME_SIZE,&mut b).unwrap();let a=r.allocate(2).unwrap();let _c=r.allocate(2).unwrap();r.free(a,2).unwrap();assert_eq!(r.allocate(1).unwrap(),a);}
 }
