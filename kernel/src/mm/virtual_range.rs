@@ -233,4 +233,6 @@ mod tests {
     #[test] fn reports_capacity_and_usage(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0x9000_0000,0x9000_0000+6*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.capacity_pages(),6);assert_eq!(r.used_pages(),0);r.allocate(4).unwrap();assert_eq!(r.used_pages(),4);}
 
     #[test] fn allocates_across_bitmap_word_boundary(){let mut b=[0u64;2];let s=0xb000_0000;let mut r=VirtualRangeAllocator::new(s,s+70*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.allocate(65).unwrap(),s);assert_eq!(r.allocate(5).unwrap(),s+65*FRAME_SIZE);assert_eq!(r.used_pages(),70);}
+
+    #[test] fn rejects_request_larger_than_capacity(){let mut b=[0u64;1];let mut r=VirtualRangeAllocator::new(0xc000_0000,0xc000_0000+8*FRAME_SIZE,&mut b).unwrap();assert_eq!(r.allocate(9),Err(VirtualRangeError::OutOfVirtualSpace));}
 }
