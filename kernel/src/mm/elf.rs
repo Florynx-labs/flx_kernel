@@ -327,4 +327,6 @@ mod tests {
 
 
     #[test] fn rejects_wrong_elf_type(){let mut b=minimal_elf(PF_R|PF_X);b[16..18].copy_from_slice(&3u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedType));}
+
+    #[test] fn rejects_wrong_machine(){let mut b=minimal_elf(PF_R|PF_X);b[18..20].copy_from_slice(&3u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedMachine));}
 }
