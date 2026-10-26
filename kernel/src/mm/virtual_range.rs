@@ -219,4 +219,6 @@ mod tests {
     }
 
     #[test] fn rejects_unaligned_range_end(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x1000,0x2001,&mut b).err(),Some(VirtualRangeError::UnalignedRange));}
+
+    #[test] fn rejects_reversed_range(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x3000,0x2000,&mut b).err(),Some(VirtualRangeError::InvalidRange));}
 }
