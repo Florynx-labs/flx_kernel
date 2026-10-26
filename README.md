@@ -141,7 +141,7 @@ Run a minimal static ELF in Ring 3 under QEMU and verify that its `int 0x80` `wr
 syscall emits `FLX USERSPACE: PASS` to COM1:
 
 ```bash
-RUSTC_BOOTSTRAP=1 tools/ci/check_userspace_smoke.sh 150
+RUSTC_BOOTSTRAP=1 bash tools/ci/check_userspace_smoke.sh 150
 ```
 
 This is a bring-up test, not a process manager: the payload spins after writing and the
