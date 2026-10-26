@@ -100,9 +100,11 @@ mod tests {
     #[test]
     fn malformed_elf_fails_before_mapping() {
         // Parsing is intentionally the first operation; malformed input cannot allocate pages.
-        let mut invalid = [0u8; 64];
-        assert!(matches!(load_elf_unreachable_for_test(&invalid), Err(ElfLoadError::InvalidElf(_))));
-        invalid[0] = 0x7f;
+        let invalid = [0u8; 64];
+        assert!(matches!(
+            load_elf_unreachable_for_test(&invalid),
+            Err(ElfLoadError::InvalidElf(ElfError::BadMagic))
+        ));
     }
 
     // Host tests cannot safely construct an AddressSpace because that requires live x86 paging.
