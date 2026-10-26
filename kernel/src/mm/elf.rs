@@ -357,4 +357,6 @@ mod tests {
     #[test] fn rejects_virtual_address_addition_overflow(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+16..p+24].copy_from_slice(&(u64::MAX-1).to_le_bytes());b[p+40..p+48].copy_from_slice(&3u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::SegmentOutOfBounds));}
 
     #[test] fn rejects_file_virtual_page_offset_mismatch(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+8..p+16].copy_from_slice(&1u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidAlignment));}
+
+    #[test] fn accepts_zero_file_size_bss_segment(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+32..p+40].copy_from_slice(&0u64.to_le_bytes());b[p+40..p+48].copy_from_slice(&16u64.to_le_bytes());assert!(ElfImage::parse(&b).is_ok());}
 }
