@@ -1,5 +1,5 @@
 //! Tiny static ELF64 payload used only by the opt-in QEMU Ring 3 smoke test.
-//! It calls int 0x80 SYS_WRITE(fd=1, "FLX USERSPACE: PASS\\n") and then spins.
+//! It calls int 0x80 SYS_WRITE(fd=1, "FLX USERSPACE: PASS\n") and then spins.
 
 const ELF_SIZE: usize = 0x1000 + 48;
 
@@ -42,7 +42,7 @@ const fn build_elf() -> [u8; ELF_SIZE] {
         image[0x1000 + i] = code[i];
         i += 1;
     }
-    let message: [u8; 20] = *b"FLX USERSPACE: PASS\\n";
+    let message: [u8; 20] = *b"FLX USERSPACE: PASS\n";
     i = 0;
     while i < message.len() {
         image[0x1000 + 28 + i] = message[i];
