@@ -276,6 +276,216 @@ impl ActivePageTable {
     }
 }
 
+/// Maximum number of simultaneously mapped user pages tracked by one address space.
+pub const MAX_USER_PAGES: usize = 256;
+const USER_MIN_ADDRESS: u64 = 0x1_0000;
+const USER_ADDRESS_LIMIT: u64 = 0x0000_8000_0000_0000;
+
+/// Independent x86_64 page-table root with shared supervisor mappings in the upper half.
+///
+/// User mappings are created only through this type, which allocates and owns each data frame.
+/// The upper PML4 half is copied from the active kernel page tables so kernel code, stack,
+/// physical-memory mapping, and device mappings remain available after CR3 switches.
+pub struct AddressSpace {
+    root_phys: u64,
+    phys_offset: u64,
+    mapped_pages: [u64; MAX_USER_PAGES],
+    mapped_count: usize,
+}
+
+impl AddressSpace {
+    /// Creates a fresh address space with an empty user half and shared kernel mappings.
+    ///
+    /// # Safety
+    /// phys_offset must be the valid writable physical-memory mapping supplied by the bootloader.
+    pub unsafe fn new(phys_offset: u64) -> Result<Self, PagingError> {
+        // SAFETY: forwarded contract guarantees the physical-memory mapping is valid.
+        let active = unsafe { ActivePageTable::current(phys_offset) };
+        let root_phys = frame::alloc_frame().ok_or(PagingError::OutOfFrames)?;
+        let root_ptr = match active.phys_ptr(root_phys) {
+            Ok(pointer) => pointer.cast::<[u64; ENTRY_COUNT]>(),
+            Err(error) => {
+                let _ = frame::free_frame(root_phys);
+                return Err(error);
+            }
+        };
+        // SAFETY: root_phys is a newly allocated frame mapped by phys_offset.
+        unsafe { core::ptr::write_bytes(root_ptr.cast::<u8>(), 0, FRAME_SIZE as usize); }
+
+        let source = match unsafe { active.table(active.root_phys) } {
+            Ok(table) => table,
+            Err(error) => {
+                let _ = frame::free_frame(root_phys);
+                return Err(error);
+            }
+        };
+        // Copy only supervisor/kernel PML4 entries. Lower-half entries remain empty and private.
+        for index in (ENTRY_COUNT / 2)..ENTRY_COUNT {
+            let entry = unsafe { read_volatile(&(*source)[index]) };
+            unsafe { write_volatile(&mut (*root_ptr)[index], entry & !USER); }
+        }
+
+        Ok(Self {
+            root_phys,
+            phys_offset,
+            mapped_pages: [0; MAX_USER_PAGES],
+            mapped_count: 0,
+        })
+    }
+
+    pub fn root_physical_address(&self) -> u64 {
+        self.root_phys
+    }
+
+    pub fn mapped_user_pages(&self) -> usize {
+        self.mapped_count
+    }
+
+    /// Allocates a zero-filled physical frame and maps it as writable, non-executable user data.
+    pub fn map_zeroed_user_page(&mut self, virtual_addr: u64) -> Result<(), PagingError> {
+        validate_user_page_address(virtual_addr)?;
+        if self.mapped_count == MAX_USER_PAGES {
+            return Err(PagingError::OutOfFrames);
+        }
+        if self.mapped_pages[..self.mapped_count].contains(&virtual_addr) {
+            return Err(PagingError::AlreadyMapped);
+        }
+
+        // SAFETY: phys_offset is validated by AddressSpace::new and remains valid.
+        let mut table = ActivePageTable { root_phys: self.root_phys, phys_offset: self.phys_offset };
+        if table.translate(virtual_addr)?.is_some() {
+            return Err(PagingError::AlreadyMapped);
+        }
+
+        let physical = frame::alloc_frame().ok_or(PagingError::OutOfFrames)?;
+        let physical_ptr = match table.phys_ptr(physical) {
+            Ok(pointer) => pointer,
+            Err(error) => {
+                let _ = frame::free_frame(physical);
+                return Err(error);
+            }
+        };
+        // SAFETY: physical is a newly allocated, exclusively owned frame.
+        unsafe { core::ptr::write_bytes(physical_ptr, 0, FRAME_SIZE as usize); }
+
+        if let Err(error) = table.map_4k(virtual_addr, physical, PageFlags::USER_DATA) {
+            let _ = frame::free_frame(physical);
+            return Err(error);
+        }
+        self.mapped_pages[self.mapped_count] = virtual_addr;
+        self.mapped_count += 1;
+        Ok(())
+    }
+
+    /// Removes a user page and returns its data frame to the physical allocator.
+    pub fn unmap_user_page(&mut self, virtual_addr: u64) -> Result<(), PagingError> {
+        validate_user_page_address(virtual_addr)?;
+        let Some(index) = self.mapped_pages[..self.mapped_count]
+            .iter()
+            .position(|address| *address == virtual_addr)
+        else {
+            return Err(PagingError::NotMapped);
+        };
+
+        let mut table = ActivePageTable { root_phys: self.root_phys, phys_offset: self.phys_offset };
+        let physical = table.unmap_4k(virtual_addr)?;
+        frame::free_frame(physical).map_err(|_| PagingError::InvalidPageTable)?;
+        self.mapped_count -= 1;
+        self.mapped_pages[index] = self.mapped_pages[self.mapped_count];
+        self.mapped_pages[self.mapped_count] = 0;
+        Ok(())
+    }
+
+    /// Switches CR3 to this address space.
+    ///
+    /// # Safety
+    /// Caller must ensure kernel execution state is valid under the shared upper-half mappings,
+    /// and must not switch away while holding locks whose data could be unmapped in this space.
+    pub unsafe fn activate(&self) {
+        // SAFETY: the root frame is page-aligned and populated by AddressSpace::new.
+        unsafe {
+            core::arch::asm!(
+                "mov cr3, {}",
+                in(reg) self.root_phys,
+                options(nostack, preserves_flags)
+            );
+        }
+    }
+
+    /// Destroys this address space and frees its user data frames and private page-table frames.
+    ///
+    /// # Safety
+    /// This address space must not be active on any CPU. No pointers into its user mappings may
+    /// be in use. Kernel upper-half tables are shared and are never traversed or freed.
+    pub unsafe fn destroy(self) -> Result<(), PagingError> {
+        // SAFETY: the caller guarantees this root is inactive and no user mapping is in use.
+        unsafe { free_user_subtree(self.root_phys, self.phys_offset)?; }
+        frame::free_frame(self.root_phys).map_err(|_| PagingError::InvalidPageTable)?;
+        Ok(())
+    }
+}
+
+fn validate_user_page_address(address: u64) -> Result<(), PagingError> {
+    if address % FRAME_SIZE != 0 {
+        return Err(PagingError::UnalignedAddress);
+    }
+    if address < USER_MIN_ADDRESS || address >= USER_ADDRESS_LIMIT || !is_canonical(address) {
+        return Err(PagingError::NonCanonicalAddress);
+    }
+    Ok(())
+}
+
+/// Recursively releases a private user-half page-table subtree (including its mapped data pages).
+unsafe fn free_user_subtree(table_phys: u64, phys_offset: u64) -> Result<(), PagingError> {
+    // SAFETY: callers pass page-table frames allocated for this address space.
+    let table_ptr = phys_offset.checked_add(table_phys).ok_or(PagingError::AddressOverflow)? as *mut [u64; ENTRY_COUNT];
+    for index in 0..ENTRY_COUNT {
+        let entry = unsafe { read_volatile(&(*table_ptr)[index]) };
+        if entry & PRESENT == 0 {
+            continue;
+        }
+        if entry & HUGE_PAGE != 0 {
+            return Err(PagingError::HugePageConflict);
+        }
+        let child_phys = entry & ADDRESS_MASK;
+        // At the leaf level the entry references user data, not another page table.
+        // This helper is called for the PML4 root; infer level through the recursive helper.
+        unsafe { free_user_table_level(child_phys, phys_offset, 3)?; }
+        unsafe { write_volatile(&mut (*table_ptr)[index], 0); }
+    }
+    Ok(())
+}
+
+unsafe fn free_user_table_level(
+    table_phys: u64,
+    phys_offset: u64,
+    level: usize,
+) -> Result<(), PagingError> {
+    let virtual_addr = phys_offset.checked_add(table_phys).ok_or(PagingError::AddressOverflow)?;
+    if !is_canonical(virtual_addr) {
+        return Err(PagingError::NonCanonicalAddress);
+    }
+    let table_ptr = virtual_addr as *mut [u64; ENTRY_COUNT];
+    for index in 0..ENTRY_COUNT {
+        let entry = unsafe { read_volatile(&(*table_ptr)[index]) };
+        if entry & PRESENT == 0 {
+            continue;
+        }
+        if entry & HUGE_PAGE != 0 {
+            return Err(PagingError::HugePageConflict);
+        }
+        let child_phys = entry & ADDRESS_MASK;
+        if level == 1 {
+            frame::free_frame(child_phys).map_err(|_| PagingError::InvalidPageTable)?;
+        } else {
+            unsafe { free_user_table_level(child_phys, phys_offset, level - 1)?; }
+            frame::free_frame(child_phys).map_err(|_| PagingError::InvalidPageTable)?;
+        }
+        unsafe { write_volatile(&mut (*table_ptr)[index], 0); }
+    }
+    Ok(())
+}
+
 /// Returns whether the processor has NX support and the kernel has enabled EFER.NXE.
 #[inline]
 fn nx_enabled() -> bool {
@@ -400,6 +610,15 @@ mod tests {
         let flags = PageFlags::KERNEL_DATA;
         let updated = merge_parent_flags(WRITABLE | NO_EXECUTE, flags);
         assert_ne!(updated & NO_EXECUTE, 0);
+    }
+
+    #[test]
+    fn validates_user_page_address_range_and_alignment() {
+        use super::{validate_user_page_address, PagingError};
+        assert_eq!(validate_user_page_address(0x4000_0000), Ok(()));
+        assert_eq!(validate_user_page_address(0x4000_0001), Err(PagingError::UnalignedAddress));
+        assert_eq!(validate_user_page_address(0x1000), Err(PagingError::NonCanonicalAddress));
+        assert_eq!(validate_user_page_address(0x0000_8000_0000_0000), Err(PagingError::NonCanonicalAddress));
     }
 
     #[test]
