@@ -361,4 +361,6 @@ mod tests {
     #[test] fn accepts_zero_file_size_bss_segment(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+32..p+40].copy_from_slice(&0u64.to_le_bytes());b[p+40..p+48].copy_from_slice(&16u64.to_le_bytes());assert!(ElfImage::parse(&b).is_ok());}
 
     #[test] fn accepts_alignment_one(){let b=minimal_elf(PF_R|PF_X);let i=ElfImage::parse(&b).unwrap();assert_eq!(i.segments()[0].alignment,1);}
+
+    #[test] fn rejects_dynamic_program_header(){let mut b=minimal_elf(PF_R|PF_X);b[ELF_HEADER_SIZE..ELF_HEADER_SIZE+4].copy_from_slice(&PT_DYNAMIC.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::UnsupportedProgramHeader));}
 }
