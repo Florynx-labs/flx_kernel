@@ -217,4 +217,6 @@ mod tests {
         assert_eq!(VirtualRangeAllocator::new(0x1000, 0x1000 + 65 * FRAME_SIZE, &mut small).err(), Some(VirtualRangeError::BitmapTooSmall));
         assert_eq!(VirtualRangeAllocator::new(0x0000_7fff_ffff_f000, 0xffff_8000_0000_0000, &mut small).err(), Some(VirtualRangeError::InvalidRange));
     }
+
+    #[test] fn rejects_unaligned_range_end(){let mut b=[0u64;1];assert_eq!(VirtualRangeAllocator::new(0x1000,0x2001,&mut b).err(),Some(VirtualRangeError::UnalignedRange));}
 }
