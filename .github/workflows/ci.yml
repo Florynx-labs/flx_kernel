@@ -54,7 +54,7 @@ jobs:
       - name: Ring 3 ELF + write syscall smoke test
         env:
           RUSTC_BOOTSTRAP: "1"
-        run: tools/ci/check_userspace_smoke.sh 150
+        run: bash tools/ci/check_userspace_smoke.sh 150
 
       - name: Upload serial log
         if: always()
