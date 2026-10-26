@@ -124,4 +124,6 @@ mod tests {
     #[test] fn write_rejects_bad_descriptor_before_length(){let mut f=frame(SYS_WRITE);f.rdi=3;f.rdx=u64::MAX;dispatch(&mut f);assert_eq!(f.rax as i64,EBADF);}
 
     #[test] fn getpid_ignores_argument_registers(){let mut f=frame(SYS_GETPID);f.rdi=u64::MAX;f.rsi=0xdead_beef;f.rdx=1024;dispatch(&mut f);assert_eq!(f.rax,1);}
+
+    #[test] fn unknown_syscall_preserves_argument_registers(){let mut f=frame(u64::MAX);f.rdi=0x1111;f.rsi=0x2222;f.rdx=0x3333;dispatch(&mut f);assert_eq!(f.rax as i64,ENOSYS);assert_eq!(f.rdi,0x1111);assert_eq!(f.rsi,0x2222);assert_eq!(f.rdx,0x3333);}
 }
