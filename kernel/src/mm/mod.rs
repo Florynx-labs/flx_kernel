@@ -10,4 +10,5 @@ pub mod elf_loader;
 pub mod frame;
 pub mod heap;
 pub mod paging;
+pub mod process;
 pub mod virtual_range;
