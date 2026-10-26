@@ -27,6 +27,7 @@ impl PageFlags {
     pub const KERNEL_DATA: Self = Self { writable: true, user: false, no_execute: true };
     pub const KERNEL_CODE: Self = Self { writable: false, user: false, no_execute: false };
     pub const USER_DATA: Self = Self { writable: true, user: true, no_execute: true };
+    pub const USER_CODE: Self = Self { writable: false, user: true, no_execute: false };
 
     fn bits(self) -> u64 {
         PRESENT
@@ -341,8 +342,21 @@ impl AddressSpace {
         self.mapped_count
     }
 
-    /// Allocates a zero-filled physical frame and maps it as writable, non-executable user data.
+    /// Allocates a zero-filled physical frame mapped as writable, non-executable user data.
     pub fn map_zeroed_user_page(&mut self, virtual_addr: u64) -> Result<(), PagingError> {
+        self.map_zeroed_user_page_with_flags(virtual_addr, PageFlags::USER_DATA)
+    }
+
+    /// Allocates a zero-filled physical frame mapped as read-only, executable user code.
+    pub fn map_zeroed_user_code_page(&mut self, virtual_addr: u64) -> Result<(), PagingError> {
+        self.map_zeroed_user_page_with_flags(virtual_addr, PageFlags::USER_CODE)
+    }
+
+    fn map_zeroed_user_page_with_flags(
+        &mut self,
+        virtual_addr: u64,
+        flags: PageFlags,
+    ) -> Result<(), PagingError> {
         validate_user_page_address(virtual_addr)?;
         if self.mapped_count == MAX_USER_PAGES {
             return Err(PagingError::OutOfFrames);
@@ -368,7 +382,7 @@ impl AddressSpace {
         // SAFETY: physical is a newly allocated, exclusively owned frame.
         unsafe { core::ptr::write_bytes(physical_ptr, 0, FRAME_SIZE as usize); }
 
-        if let Err(error) = table.map_4k(virtual_addr, physical, PageFlags::USER_DATA) {
+        if let Err(error) = table.map_4k(virtual_addr, physical, flags) {
             let _ = frame::free_frame(physical);
             return Err(error);
         }
@@ -439,7 +453,7 @@ fn validate_user_page_address(address: u64) -> Result<(), PagingError> {
 unsafe fn free_user_subtree(table_phys: u64, phys_offset: u64) -> Result<(), PagingError> {
     // SAFETY: callers pass page-table frames allocated for this address space.
     let table_ptr = phys_offset.checked_add(table_phys).ok_or(PagingError::AddressOverflow)? as *mut [u64; ENTRY_COUNT];
-    for index in 0..ENTRY_COUNT {
+    for index in 0..(ENTRY_COUNT / 2) {
         let entry = unsafe { read_volatile(&(*table_ptr)[index]) };
         if entry & PRESENT == 0 {
             continue;
