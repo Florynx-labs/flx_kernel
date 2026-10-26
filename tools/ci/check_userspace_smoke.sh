@@ -9,7 +9,7 @@ LOG="userspace-serial.log"
 
 timeout "${TIMEOUT}" cargo run --package flx-runner -- --userspace-smoke -display none -no-reboot > "${LOG_RAW}" 2>&1
 status=$?
-sed -e 's/\\x1b\\[[0-9;]*m//g' -e 's/\\r//g' "${LOG_RAW}" > "${LOG}"
+sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' "${LOG_RAW}" > "${LOG}"
 
 echo "================ userspace serial log ================"
 cat "${LOG}"
