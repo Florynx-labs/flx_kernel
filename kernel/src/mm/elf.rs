@@ -347,4 +347,6 @@ mod tests {
     #[test] fn rejects_file_size_larger_than_memory_size(){let mut b=minimal_elf(PF_R|PF_X);let p=ELF_HEADER_SIZE;b[p+32..p+40].copy_from_slice(&2u64.to_le_bytes());b[p+40..p+48].copy_from_slice(&1u64.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
 
     #[test] fn rejects_segment_without_read_permission(){let b=minimal_elf(PF_X);assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
+
+    #[test] fn rejects_unknown_segment_flags(){let b=minimal_elf(PF_R|PF_X|0x10);assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidSegment));}
 }
