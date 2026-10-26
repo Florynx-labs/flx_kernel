@@ -1,7 +1,7 @@
 //! Tiny static ELF64 payload used only by the opt-in QEMU Ring 3 smoke test.
 //! It calls int 0x80 SYS_WRITE(fd=1, "FLX USERSPACE: PASS\n") and then spins.
 
-const ELF_SIZE: usize = 0x1000 + 48;
+const ELF_SIZE: usize = 0x1000 + 46;
 
 /// A minimal x86_64 ET_EXEC image with one RX PT_LOAD segment at 0x400000.
 const fn build_elf() -> [u8; ELF_SIZE] {
@@ -24,12 +24,12 @@ const fn build_elf() -> [u8; ELF_SIZE] {
     put_u32(&mut image, 68, 5);
     put_u64(&mut image, 72, 0x1000);
     put_u64(&mut image, 80, 0x400000);
-    put_u64(&mut image, 96, 48);      // file size
-    put_u64(&mut image, 104, 48);     // memory size
+    put_u64(&mut image, 96, 46);      // file size
+    put_u64(&mut image, 104, 46);     // memory size
     put_u64(&mut image, 112, 0x1000); // alignment
 
     // mov eax, 1; mov edi, 1; lea rsi, [rip + 9]; mov edx, 20; int 0x80; jmp $.
-    let code: [u8; 28] = [
+    let code: [u8; 26] = [
         0xB8, 1, 0, 0, 0,
         0xBF, 1, 0, 0, 0,
         0x48, 0x8D, 0x35, 9, 0, 0, 0,
@@ -45,7 +45,7 @@ const fn build_elf() -> [u8; ELF_SIZE] {
     let message: [u8; 20] = *b"FLX USERSPACE: PASS\n";
     i = 0;
     while i < message.len() {
-        image[0x1000 + 28 + i] = message[i];
+        image[0x1000 + 26 + i] = message[i];
         i += 1;
     }
     image
