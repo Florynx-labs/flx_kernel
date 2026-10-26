@@ -17,6 +17,9 @@ pub mod mm;
 static GLOBAL_ALLOCATOR: mm::heap::KernelHeap = mm::heap::KernelHeap::new();
 pub mod sync;
 
+#[cfg(feature = "userspace-smoke")]
+mod user_smoke;
+
 // panic handler is in its own file and auto-linked as #[panic_handler]
 mod panic;
 
@@ -217,6 +220,29 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     crate::serial_println!();
     crate::serial_println!("[OK] Kernel initialized.");
     crate::serial_println!("[INFO] Entering safe kernel idle loop...");
+
+    #[cfg(feature = "userspace-smoke")]
+    {
+        let offset = match phys_offset {
+            Some(value) => value,
+            None => {
+                kerror!("Userspace smoke test requires the physical-memory mapping");
+                loop { arch::x86_64::cpu::halt(); }
+            }
+        };
+        kok!("Preparing Ring 3 ELF smoke test");
+        // SAFETY: bootloader physical mapping and frame allocator were initialized above;
+        // the process is prepared inactive and entered only after GDT/IDT/syscalls are ready.
+        let process = match unsafe { mm::process::UserProcess::prepare(user_smoke::ELF, offset) } {
+            Ok(process) => process,
+            Err(error) => {
+                kerror!("Ring 3 ELF smoke preparation failed: {:?}", error);
+                loop { arch::x86_64::cpu::halt(); }
+            }
+        };
+        // One-way transition: the test ELF writes a marker to COM1 and then spins.
+        unsafe { process.enter() }
+    }
 
     // 11. Idle loop: sleep until an interrupt, echo typed characters.
     loop {
