@@ -47,13 +47,13 @@ FLX Kernel is engineered as a foundational technology base designed to evolve in
 - **Interrupts**: 8259 PIC remapped to vectors 32–47 (spurious IRQ handling), PIT system timer at 100 Hz, PS/2 keyboard (scancode set 1, US layout, ring buffer)
 - **Physical memory**: UEFI memory map parsing and a bitmap **physical frame allocator** (4 KiB frames, double-free detection, protection against freeing reserved frames, boot-time self-test)
 - **Virtual memory foundation**: inspect active CR3 tables; translate 4 KiB / 2 MiB / 1 GiB mappings; map and unmap 4 KiB pages; invalidate TLB after edits; propagate writable/user/NX requirements through intermediate entries; create isolated user address spaces with private lower-half page tables and shared supervisor-only kernel mappings
-- **ELF64 validation foundation**: bounded parser for static little-endian x86_64 ET_EXEC images, validating PT_LOAD bounds, entry point, alignment, page budget, segment overlap, and W^X; dynamic linking and actual loading/execution are not yet implemented
+- **ELF64 loading foundation**: bounded parser and transactional PT_LOAD mapper for static little-endian x86_64 ET_EXEC images; copies segment bytes into isolated user pages, leaves BSS zero-filled, applies user/write/NX permissions, and rolls back newly mapped pages on load failure; dynamic linking, user stack, and execution are not yet implemented
 - **Kernel heap**: a thread-safe first-fit allocator with a 1 MiB static early arena plus on-demand, zeroed, frame-backed heap arenas mapped into a probed virtual window after the physical frame allocator is ready; bounded arena count and size, allocation routing, and boot-time smoke tests
 - **Virtual range allocator**: fixed-capacity, bitmap-backed contiguous virtual-page reservation with bounds, alignment, canonical-address, and double-free checks; does not map pages by itself
 - **Sync**: IRQ-safe `Spinlock<T>` (local interrupts are disabled while the lock is held)
 - **Tests / CI**: Python source-contract regression tests and Rust host-side memory tests run before the kernel build and headless QEMU/OVMF boot validation
 
-**Not implemented yet**: ELF segment mapping and byte loading, user-mode entry/stack setup, process launch, syscalls, and scheduler integration; heap arenas are bounded and independently managed (they do not yet form one contiguous expandable heap); Local APIC / IO-APIC and SMP, VFS/filesystems, networking, and a broad driver model. These are planned in staged milestones; the current paging API is an early foundation, not complete virtual memory management.
+**Not implemented yet**: user-mode entry/stack setup, process launch, syscalls, and scheduler integration; heap arenas are bounded and independently managed (they do not yet form one contiguous expandable heap); Local APIC / IO-APIC and SMP, VFS/filesystems, networking, and a broad driver model. These are planned in staged milestones; the current paging API is an early foundation, not complete virtual memory management.
 
 ---
 
