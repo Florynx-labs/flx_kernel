@@ -1,7 +1,9 @@
 //! Minimal, explicit int 0x80 syscall ABI for initial Ring 3 bring-up.
 //!
-//! The dispatcher deliberately implements only a harmless identity query. Memory-backed
-//! syscalls are not exposed until user-pointer validation and copy-in/copy-out helpers exist.
+//! Initial int 0x80 ABI for the single-task Ring 3 bring-up prototype.
+//!
+//! SYS_WRITE copies bytes through the active AddressSpace's validated physical mapping. The
+//! ABI is intentionally small and not yet a stable userspace contract.
 
 use super::interrupts::{self, InterruptFrame};
 
@@ -11,6 +13,10 @@ pub const SYS_WRITE: u64 = 1;
 pub const SYS_GETPID: u64 = 2;
 
 const ENOSYS: i64 = -38;
+const EBADF: i64 = -9;
+const EFAULT: i64 = -14;
+const EINVAL: i64 = -22;
+const MAX_WRITE_BYTES: usize = 1024;
 
 static INITIAL_TASK_EXITED: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
@@ -37,8 +43,30 @@ fn dispatch(frame: &mut InterruptFrame) {
             frame.rax = 1;
         }
         SYS_WRITE => {
-            // Never dereference a user pointer until validated copy-in/copy-out exists.
-            frame.rax = ENOSYS as u64;
+            // ABI: RDI=fd (1 stdout or 2 stderr), RSI=user pointer, RDX=byte length.
+            if frame.rdi != 1 && frame.rdi != 2 {
+                frame.rax = EBADF as u64;
+                return;
+            }
+            let Ok(length) = usize::try_from(frame.rdx) else {
+                frame.rax = EINVAL as u64;
+                return;
+            };
+            if length > MAX_WRITE_BYTES {
+                frame.rax = EINVAL as u64;
+                return;
+            }
+            let mut bytes = [0u8; MAX_WRITE_BYTES];
+            if crate::mm::process::copy_from_current_user(frame.rsi, &mut bytes[..length]).is_err() {
+                frame.rax = EFAULT as u64;
+                return;
+            }
+            // Raw bytes are emitted without assuming that userspace supplied valid UTF-8.
+            let mut serial = crate::drivers::serial::SERIAL1.lock();
+            for byte in bytes[..length].iter().copied() {
+                serial.send(byte);
+            }
+            frame.rax = length as u64;
         }
         _ => frame.rax = ENOSYS as u64,
     }
@@ -72,9 +100,18 @@ mod tests {
     }
 
     #[test]
-    fn write_is_not_implemented_without_pointer_validation() {
+    fn write_rejects_invalid_file_descriptor() {
         let mut f = frame(SYS_WRITE);
         dispatch(&mut f);
-        assert_eq!(f.rax as i64, ENOSYS);
+        assert_eq!(f.rax as i64, EBADF);
+    }
+
+    #[test]
+    fn write_rejects_excessive_length() {
+        let mut f = frame(SYS_WRITE);
+        f.rdi = 1;
+        f.rdx = (MAX_WRITE_BYTES + 1) as u64;
+        dispatch(&mut f);
+        assert_eq!(f.rax as i64, EINVAL);
     }
 }
