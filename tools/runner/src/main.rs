@@ -21,6 +21,7 @@ fn main() -> Result<()> {
 
     let is_release = std::env::args().any(|arg| arg == "--release");
     let no_qemu = std::env::args().any(|arg| arg == "--no-run");
+    let userspace_smoke = std::env::args().any(|arg| arg == "--userspace-smoke");
 
     // 2. Build kernel ELF with cargo
     println!("[1/4] Building kernel binary for target x86_64-unknown-none...");
@@ -35,6 +36,9 @@ fn main() -> Result<()> {
 
     if is_release {
         cargo_cmd.arg("--release");
+    }
+    if userspace_smoke {
+        cargo_cmd.arg("--features").arg("userspace-smoke");
     }
 
     let status = cargo_cmd.status().context("Failed to execute cargo build")?;
@@ -111,7 +115,7 @@ fn main() -> Result<()> {
 
     // Pass through any extra arguments
     for arg in std::env::args().skip(1) {
-        if arg == "--release" || arg == "--no-run" {
+        if arg == "--release" || arg == "--no-run" || arg == "--userspace-smoke" {
             continue;
         }
         qemu_cmd.arg(arg);
