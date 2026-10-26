@@ -337,4 +337,6 @@ mod tests {
     #[test] fn rejects_wrong_header_size(){let mut b=minimal_elf(PF_R|PF_X);b[52..54].copy_from_slice(&63u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidHeaderSize));}
 
     #[test] fn rejects_wrong_program_header_size(){let mut b=minimal_elf(PF_R|PF_X);b[54..56].copy_from_slice(&55u16.to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::InvalidProgramHeaderSize));}
+
+    #[test] fn rejects_too_many_program_headers(){let mut b=minimal_elf(PF_R|PF_X);b[56..58].copy_from_slice(&((MAX_LOAD_SEGMENTS+1) as u16).to_le_bytes());assert_eq!(ElfImage::parse(&b),Err(ElfError::TooManyProgramHeaders));}
 }
