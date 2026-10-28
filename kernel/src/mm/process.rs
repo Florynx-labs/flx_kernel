@@ -44,6 +44,12 @@ impl UserProcess {
         let mut address_space = unsafe { AddressSpace::new(phys_offset) }
             .map_err(ProcessError::AddressSpace)?;
 
+        if let Err(error) = usermode::prepare_kernel_stack(&mut address_space) {
+            // SAFETY: this newly created address space has not been activated.
+            let _ = unsafe { address_space.destroy() };
+            return Err(ProcessError::UserMode(error));
+        }
+
         let entry = match elf_loader::load_elf(&mut address_space, bytes) {
             Ok(entry) => entry,
             Err(error) => {
