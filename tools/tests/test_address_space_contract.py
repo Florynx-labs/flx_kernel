@@ -28,11 +28,17 @@ class AddressSpaceContractTests(unittest.TestCase):
         self.assertIn("mapped_pages: [u64; MAX_USER_PAGES]", PAGING)
         self.assertIn("mapped_count: usize", PAGING)
 
-    def test_new_root_copies_only_kernel_half(self):
+    def test_new_root_preserves_kernel_slots_but_keeps_user_slots_private(self):
         body = function_body(PAGING, "pub unsafe fn new(phys_offset: u64)")
-        self.assertIn("(ENTRY_COUNT / 2)..ENTRY_COUNT", body)
+        self.assertIn("for index in 0..ENTRY_COUNT", body)
+        self.assertIn("index < ENTRY_COUNT / 2 && index != 2", body)
         self.assertIn("entry & !USER", body)
         self.assertIn("frame::alloc_frame()", body)
+        # The kernel image lives in lower-half PML4 slot 2, but user code (0)
+        # and user stack (255) must not inherit bootloader page-table trees.
+        self.assertIn("which is PML4 index 2", body)
+        self.assertIn("user code (index 0) and", body)
+        self.assertIn("user stack (index 255)", body)
 
     def test_user_pages_are_lower_half_and_nonzero(self):
         body = function_body(PAGING, "fn validate_user_page_address(address: u64)")
