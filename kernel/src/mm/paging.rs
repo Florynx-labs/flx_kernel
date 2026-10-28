@@ -320,14 +320,14 @@ impl AddressSpace {
                 return Err(error);
             }
         };
-        // Preserve every supervisor mapping needed while running kernel code after CR3 switches.
-        // This kernel currently executes from a lower-half virtual address (around 1 TiB), so
-        // copying only the upper half drops the kernel text/data and the Ring 0 interrupt stack.
-        // User mappings are not copied: only present supervisor PML4 entries are inherited.
+        // Inherit every present PML4 mapping so the kernel can continue executing after CR3
+        // changes, including its lower-half image around 1 TiB and the Ring 0 interrupt stack.
+        // Clear USER at the PML4 level: inherited mappings start supervisor-only. User pages
+        // created below explicitly set USER on their own page-table path as required.
         for index in 0..ENTRY_COUNT {
             let entry = unsafe { read_volatile(&(*source)[index]) };
-            if entry & PRESENT != 0 && entry & USER == 0 {
-                unsafe { write_volatile(&mut (*root_ptr)[index], entry); }
+            if entry & PRESENT != 0 {
+                unsafe { write_volatile(&mut (*root_ptr)[index], entry & !USER); }
             }
         }
 
