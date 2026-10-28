@@ -320,10 +320,19 @@ impl AddressSpace {
                 return Err(error);
             }
         };
-        // Copy only supervisor/kernel PML4 entries. Lower-half entries remain empty and private.
-        for index in (ENTRY_COUNT / 2)..ENTRY_COUNT {
+        // Keep the upper-half supervisor mappings (including the physical-memory map) and
+        // the kernel image's lower-half PML4 slot. This kernel is linked at 0x10000000000,
+        // which is PML4 index 2. Do not copy other lower-half slots: user code (index 0) and
+        // the user stack (index 255) need private page-table trees, not shared bootloader tables.
+        // Clear USER on inherited root entries so kernel mappings remain supervisor-only.
+        for index in 0..ENTRY_COUNT {
+            if index < ENTRY_COUNT / 2 && index != 2 {
+                continue;
+            }
             let entry = unsafe { read_volatile(&(*source)[index]) };
-            unsafe { write_volatile(&mut (*root_ptr)[index], entry & !USER); }
+            if entry & PRESENT != 0 {
+                unsafe { write_volatile(&mut (*root_ptr)[index], entry & !USER); }
+            }
         }
 
         Ok(Self {
