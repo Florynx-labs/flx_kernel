@@ -21,6 +21,7 @@ jobs:
         run: |
           rustup show
           rustup component add llvm-tools-preview rust-src
+          rustup target add aarch64-unknown-none
 
       - name: Install QEMU
         timeout-minutes: 8
@@ -33,6 +34,9 @@ jobs:
 
       - name: Test memory-management algorithms
         run: cargo test --package flx-mm-tests --color never
+
+      - name: Cross-check AArch64 CPU primitives
+        run: cargo check --package flx-arch-smoke --target aarch64-unknown-none --color never
 
       - name: Build kernel
         run: |
