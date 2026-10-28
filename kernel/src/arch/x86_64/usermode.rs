@@ -24,6 +24,24 @@ pub enum UserModeError {
     InvalidEntry,
 }
 
+/// Ensures the dedicated Ring 3 transition/interrupt stack is mapped in a process root.
+///
+/// The stack is statically allocated in the kernel image. Explicitly preserve each leaf page
+/// instead of relying only on inherited PML4 entries from the bootloader's page tables.
+pub fn prepare_kernel_stack(space: &mut AddressSpace) -> Result<(), UserModeError> {
+    let base = core::ptr::addr_of_mut!(USER_TASK_KERNEL_STACK) as u64;
+    let first = base & !(4096 - 1);
+    let end = base.checked_add(KERNEL_INTERRUPT_STACK_SIZE as u64)
+        .ok_or(UserModeError::InvalidEntry)?;
+    let limit = end.checked_add(4095).ok_or(UserModeError::InvalidEntry)? & !(4096 - 1);
+    let mut page = first;
+    while page < limit {
+        space.ensure_kernel_mapping(page).map_err(UserModeError::Paging)?;
+        page += 4096;
+    }
+    Ok(())
+}
+
 /// Allocates a small, zero-filled user stack in the supplied address space.
 pub fn prepare_user_stack(space: &mut AddressSpace) -> Result<u64, UserModeError> {
     let first = USER_STACK_TOP
