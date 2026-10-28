@@ -70,12 +70,17 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
     const USER_RFLAGS: u64 = 0x202;
     unsafe {
         asm!(
+            // CR3 was switched before entering this function. The boot stack may not be
+            // mapped in the new address space, so move to the dedicated kernel stack before
+            // the first push; otherwise preparing the IRETQ frame can page-fault in Ring 0.
+            "mov rsp, {kernel_stack_top}",
             "push {user_ss}",
             "push {user_rsp}",
             "push {rflags}",
             "push {user_cs}",
             "push {entry}",
             "iretq",
+            kernel_stack_top = in(reg) kernel_stack_top,
             user_ss = in(reg) gdt::USER_DATA_SELECTOR as u64,
             user_rsp = in(reg) user_stack,
             rflags = in(reg) USER_RFLAGS,
