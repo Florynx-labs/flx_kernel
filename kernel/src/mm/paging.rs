@@ -343,6 +343,36 @@ impl AddressSpace {
         })
     }
 
+    /// Ensures a supervisor-only kernel virtual page is present in this address space.
+    ///
+    /// Resolve the physical frame through the active boot/kernel page tables before CR3 is
+    /// switched. This protects statically allocated kernel stacks across address-space changes.
+    pub fn ensure_kernel_mapping(&mut self, virtual_addr: u64) -> Result<(), PagingError> {
+        if virtual_addr % FRAME_SIZE != 0 {
+            return Err(PagingError::UnalignedAddress);
+        }
+        if !is_canonical(virtual_addr) {
+            return Err(PagingError::NonCanonicalAddress);
+        }
+
+        // SAFETY: called while the boot/kernel address space is active and phys_offset is valid.
+        let active = unsafe { ActivePageTable::current(self.phys_offset) };
+        let physical = active.translate(virtual_addr)?.ok_or(PagingError::NotMapped)?;
+        let mut target = ActivePageTable {
+            root_phys: self.root_phys,
+            phys_offset: self.phys_offset,
+        };
+        match target.translate(virtual_addr)? {
+            Some(existing) if existing == (physical & !(FRAME_SIZE - 1)) => Ok(()),
+            Some(_) => Err(PagingError::AlreadyMapped),
+            None => target.map_4k(
+                virtual_addr,
+                physical & !(FRAME_SIZE - 1),
+                PageFlags::KERNEL_DATA,
+            ),
+        }
+    }
+
     pub fn root_physical_address(&self) -> u64 {
         self.root_phys
     }
