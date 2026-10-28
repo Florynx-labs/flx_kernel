@@ -69,8 +69,9 @@ pub fn prepare_user_stack(space: &mut AddressSpace) -> Result<u64, UserModeError
 /// memory in the intended address space. The caller must ensure the address space is active,
 /// interrupt handlers are initialized, and the kernel stack is mapped supervisor-only.
 /// This prototype supports one user task on the boot CPU only.
-pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
-    if entry < 0x1_0000 || entry >= 0x0000_8000_0000_0000
+pub unsafe fn enter_user_mode(root_phys: u64, entry: u64, user_stack: u64) -> ! {
+    if root_phys & 0xFFF != 0
+        || entry < 0x1_0000 || entry >= 0x0000_8000_0000_0000
         || user_stack < 0x1_0000 || user_stack >= 0x0000_8000_0000_0000
         || user_stack & 0xF != 0
     {
@@ -88,10 +89,10 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
     const USER_RFLAGS: u64 = 0x202;
     unsafe {
         asm!(
-            // CR3 was switched before entering this function. The boot stack may not be
-            // mapped in the new address space, so move to the dedicated kernel stack before
-            // the first push; otherwise preparing the IRETQ frame can page-fault in Ring 0.
+            // Move off the Rust/boot stack before changing CR3: it is not guaranteed to be
+            // mapped in the process root. The dedicated kernel stack is mapped in both roots.
             "mov rsp, {kernel_stack_top}",
+            "mov cr3, {root_phys}",
             "push {user_ss}",
             "push {user_rsp}",
             "push {rflags}",
@@ -99,6 +100,7 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
             "push {entry}",
             "iretq",
             kernel_stack_top = in(reg) kernel_stack_top,
+            root_phys = in(reg) root_phys,
             user_ss = in(reg) gdt::USER_DATA_SELECTOR as u64,
             user_rsp = in(reg) user_stack,
             rflags = in(reg) USER_RFLAGS,
