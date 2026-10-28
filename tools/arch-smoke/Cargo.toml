@@ -1,0 +1,11 @@
+[package]
+name = "flx-arch-smoke"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
