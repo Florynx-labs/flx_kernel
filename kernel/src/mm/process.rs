@@ -101,10 +101,11 @@ impl UserProcess {
             core::ptr::addr_of!(self.address_space).cast_mut(),
             Ordering::Release,
         );
-        // SAFETY: caller guarantees the kernel execution state is valid in the shared mappings.
-        unsafe { self.address_space.activate(); }
-        // SAFETY: entry and stack were validated by the ELF parser and stack builder.
-        unsafe { usermode::enter_user_mode(self.entry, self.user_stack) }
+        // The final CR3 switch happens inside the non-returning assembly transition, after
+        // RSP moves off this Rust frame and onto the kernel stack mapped in both address spaces.
+        let root_phys = self.address_space.root_physical_address();
+        // SAFETY: entry, user stack, root, and dedicated kernel stack were prepared above.
+        unsafe { usermode::enter_user_mode(root_phys, self.entry, self.user_stack) }
     }
 }
 

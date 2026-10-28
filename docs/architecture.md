@@ -106,3 +106,26 @@
 * **v1.0.0**: SMP, local APIC/IO-APIC, capability-oriented security foundations, hardening and FLX OS release candidate.
 
 These milestones are a roadmap, not claims that the future subsystems already exist. Each milestone requires automated tests and a successful QEMU boot before it is considered complete.
+
+
+## Multi-architecture roadmap (incremental)
+
+FLX remains **bootable on x86_64 only** today. Architecture support will be added in explicit, testable stages rather than claiming a CPU target is supported merely because it compiles.
+
+| Architecture | Current stage | Next proof point |
+|---|---|---|
+| x86_64 | Existing UEFI boot and QEMU smoke tests | Stabilize Ring 3 transition and isolate x86-specific services |
+| AArch64 / ARM64 | CPU primitive scaffold and cross-compilation check | UEFI/EDK2 entry, exception vectors, generic timer, GIC, and QEMU `virt` boot |
+| RISC-V 64 | Planned | SBI boot path, trap entry, CLINT/ACLINT or platform timer, PLIC/AIA, QEMU `virt` boot |
+| LoongArch64 | Research backlog | Toolchain/firmware feasibility and minimal serial boot before committing to support |
+
+### Portability rules
+
+- Keep CPU control, exception entry, interrupt controllers, timers, and context switching under `kernel/src/arch/<arch>/`.
+- Move common memory, scheduler, process, and syscall policies behind architecture-neutral interfaces; do not make one architecture emulate another's registers or interrupt model.
+- Preserve a per-architecture boot and QEMU smoke test. Cross-compilation is a gate, not proof of successful hardware boot.
+- Prefer feature detection and conservative fallbacks over assuming optional CPU extensions.
+
+### Performance and security principles
+
+The design will study upstream Linux 7.x architecture/MM documentation and Microsoft's published Windows kernel engineering work as references, not copy their proprietary implementation. Candidate principles include per-CPU data and reduced global-lock contention, cache-aware allocation, batching expensive TLB operations, heterogeneous-core-aware scheduling when a scheduler exists, and zero-initialized allocations by default. Each optimization must be benchmarked and retain correctness/security tests; no speculative tuning before measurements.

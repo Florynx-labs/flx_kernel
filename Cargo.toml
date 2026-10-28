@@ -4,6 +4,7 @@ members = [
     "kernel",
     "tools/runner",
     "tools/mm-tests",
+    "tools/arch-smoke",
 ]
 
 [workspace.package]
