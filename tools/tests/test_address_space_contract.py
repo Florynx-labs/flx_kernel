@@ -31,7 +31,8 @@ class AddressSpaceContractTests(unittest.TestCase):
     def test_new_root_preserves_kernel_slots_but_keeps_user_slots_private(self):
         body = function_body(PAGING, "pub unsafe fn new(phys_offset: u64)")
         self.assertIn("for index in 0..ENTRY_COUNT", body)
-        self.assertIn("index < ENTRY_COUNT / 2 && index != 2", body)
+        self.assertIn("let phys_map_index = indices(phys_offset)[0];", body)
+        self.assertIn("index < ENTRY_COUNT / 2 && index != 2 && index != phys_map_index", body)
         self.assertIn("entry & !USER", body)
         self.assertIn("frame::alloc_frame()", body)
         # The kernel image lives in lower-half PML4 slot 2, but user code (0)
