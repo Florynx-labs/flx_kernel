@@ -61,6 +61,7 @@ class AddressSpaceContractTests(unittest.TestCase):
         self.assertIn("0..(ENTRY_COUNT / 2)", body)
         self.assertIn("free_user_table_level", body)
         self.assertIn("frame::free_frame", PAGING)
+        self.assertIn("if index == 2 || index == phys_map_index", body)
 
 
 if __name__ == "__main__":
