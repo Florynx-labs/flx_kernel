@@ -590,7 +590,13 @@ fn validate_user_page_address(address: u64) -> Result<(), PagingError> {
 unsafe fn free_user_subtree(table_phys: u64, phys_offset: u64) -> Result<(), PagingError> {
     // SAFETY: callers pass page-table frames allocated for this address space.
     let table_ptr = phys_offset.checked_add(table_phys).ok_or(PagingError::AddressOverflow)? as *mut [u64; ENTRY_COUNT];
+    let phys_map_index = indices(phys_offset)[0];
     for index in 0..(ENTRY_COUNT / 2) {
+        // These lower-half slots are inherited supervisor mappings, not owned user trees.
+        // Never recurse into or free the shared kernel image or physical-memory map.
+        if index == 2 || index == phys_map_index {
+            continue;
+        }
         let entry = unsafe { read_volatile(&(*table_ptr)[index]) };
         if entry & PRESENT == 0 {
             continue;
