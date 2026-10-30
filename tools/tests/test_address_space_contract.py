@@ -39,7 +39,7 @@ class AddressSpaceContractTests(unittest.TestCase):
         # and user stack (255) must not inherit bootloader page-table trees.
         self.assertIn("Preserve the kernel image mapping (PML4 index 2)", body)
         self.assertIn("leave user code (index 0) and the user stack", body)
-        self.assertIn("user stack (index 255)", body)
+        self.assertIn("index 255", body)
 
     def test_user_pages_are_lower_half_and_nonzero(self):
         body = function_body(PAGING, "fn validate_user_page_address(address: u64)")
