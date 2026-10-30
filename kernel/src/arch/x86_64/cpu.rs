@@ -86,3 +86,44 @@ pub fn halt_loop() -> ! {
         halt();
     }
 }
+
+
+/// Native x86_64 implementation of the architecture-neutral CPU contract.
+#[cfg(target_arch = "x86_64")]
+pub struct X86_64;
+
+#[cfg(target_arch = "x86_64")]
+
+impl crate::arch::interface::CpuArchitecture for X86_64 {
+    const NAME: &'static str = "x86_64";
+
+    fn disable_interrupts() { disable_interrupts(); }
+    fn enable_interrupts() { enable_interrupts(); }
+    fn interrupts_enabled() -> bool { interrupts_enabled() }
+
+    fn logical_cpu_id() -> u64 {
+        // CPUID leaf 1 EBX[31:24] reports the initial APIC ID on supported x86 CPUs.
+        // This is sufficient for the current single-package bring-up; topology discovery
+        // and x2APIC IDs will be added with the SMP/APIC milestone.
+        let result = unsafe { __cpuid(1) };
+        ((result.ebx >> 24) & 0xff) as u64
+    }
+
+    fn halt_forever() -> ! { halt_loop() }
+
+    unsafe fn activate_address_space(root_phys: u64) {
+        assert_eq!(root_phys & 0xfff, 0, "CR3 root must be 4 KiB aligned");
+        // SAFETY: upheld by the trait caller's contract.
+        unsafe { core::arch::asm!("mov cr3, {}", in(reg) root_phys, options(nostack, preserves_flags)); }
+    }
+
+    unsafe fn invalidate_tlb_all() {
+        // Reloading CR3 flushes non-global translations when PCID is not enabled.
+        // Global mappings are intentionally retained; use INVPCID when PCID support lands.
+        let root: u64;
+        unsafe {
+            core::arch::asm!("mov {}, cr3", out(reg) root, options(nomem, nostack, preserves_flags));
+            core::arch::asm!("mov cr3, {}", in(reg) root, options(nostack, preserves_flags));
+        }
+    }
+}
