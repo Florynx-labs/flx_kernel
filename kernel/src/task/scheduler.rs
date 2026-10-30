@@ -124,7 +124,7 @@ impl Scheduler {
     }
 
     pub fn block_current(&mut self) -> Result<(), SchedulerError> {
-        let index = self.current.take().ok_or(SchedulerError::NoCurrentTask)?;
+        let index = self.current.ok_or(SchedulerError::NoCurrentTask)?;
         let task = self.tasks[index].as_mut().ok_or(SchedulerError::NoCurrentTask)?;
         task.state = TaskState::Blocked;
         task.quantum_remaining = self.quantum;
@@ -142,7 +142,7 @@ impl Scheduler {
     }
 
     pub fn exit_current(&mut self) -> Result<(), SchedulerError> {
-        let index = self.current.take().ok_or(SchedulerError::NoCurrentTask)?;
+        let index = self.current.ok_or(SchedulerError::NoCurrentTask)?;
         let task = self.tasks[index].as_mut().ok_or(SchedulerError::NoCurrentTask)?;
         task.state = TaskState::Exited;
         task.quantum_remaining = 0;
