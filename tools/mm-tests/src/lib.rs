@@ -27,3 +27,7 @@ pub mod heap;
 pub mod virtual_range;
 
 pub use mm::paging;
+
+// Exercise the production scheduler policy in the host-side unit-test harness.
+#[path = "../../../kernel/src/task/scheduler.rs"]
+pub mod scheduler;
