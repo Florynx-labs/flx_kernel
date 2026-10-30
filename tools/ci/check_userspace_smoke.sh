@@ -15,6 +15,27 @@ echo "================ userspace serial log ================"
 cat "${LOG}"
 echo "======================================================="
 
+# Resolve guest instruction pointers against the exact ELF built by the runner. This turns
+# a raw page-fault RIP into a source file/line in CI logs without requiring a debugger.
+KERNEL_ELF="target/x86_64-unknown-none/debug/flx-kernel"
+ADDR2LINE="$(command -v addr2line || true)"
+if [ -z "${ADDR2LINE}" ]; then
+  HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+  LLVM_BIN="$(rustc --print sysroot)/lib/rustlib/${HOST_TRIPLE}/bin"
+  if [ -x "${LLVM_BIN}/llvm-addr2line" ]; then
+    ADDR2LINE="${LLVM_BIN}/llvm-addr2line"
+  fi
+fi
+if [ -x "${KERNEL_ELF}" ] && [ -n "${ADDR2LINE}" ]; then
+  while IFS= read -r rip; do
+    address="${rip#RIP=}"
+    echo "[addr2line] ${address}"
+    "${ADDR2LINE}" -f -C -e "${KERNEL_ELF}" "${address}" || true
+  done < <(grep -oE 'RIP=0x[0-9a-fA-F]+' "${LOG}" | sort -u)
+else
+  echo "[addr2line] unavailable (kernel ELF or addr2line not found)"
+fi
+
 if [ "${status}" -ne 124 ]; then
   python3 tools/ci/annotate.py "${LOG}" "userspace smoke: runner exited early (status ${status})" 7000
   exit 1
