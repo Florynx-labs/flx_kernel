@@ -89,7 +89,10 @@ pub fn halt_loop() -> ! {
 
 
 /// Native x86_64 implementation of the architecture-neutral CPU contract.
+#[cfg(target_arch = "x86_64")]
 pub struct X86_64;
+
+#[cfg(target_arch = "x86_64")]
 
 impl crate::arch::interface::CpuArchitecture for X86_64 {
     const NAME: &'static str = "x86_64";
