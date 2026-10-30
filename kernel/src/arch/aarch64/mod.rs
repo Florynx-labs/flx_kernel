@@ -85,7 +85,10 @@ pub unsafe fn invalidate_tlb_all_el1() {
 
 
 /// Native AArch64 implementation of the architecture-neutral CPU contract.
+#[cfg(target_arch = "aarch64")]
 pub struct AArch64;
+
+#[cfg(target_arch = "aarch64")]
 
 impl crate::arch::interface::CpuArchitecture for AArch64 {
     const NAME: &'static str = "aarch64";
