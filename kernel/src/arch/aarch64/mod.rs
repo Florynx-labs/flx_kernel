@@ -82,3 +82,41 @@ pub unsafe fn invalidate_tlb_all_el1() {
         );
     }
 }
+
+
+/// Native AArch64 implementation of the architecture-neutral CPU contract.
+pub struct AArch64;
+
+impl crate::arch::interface::CpuArchitecture for AArch64 {
+    const NAME: &'static str = "aarch64";
+
+    fn disable_interrupts() { disable_interrupts(); }
+    fn enable_interrupts() { enable_interrupts(); }
+
+    fn interrupts_enabled() -> bool {
+        let daif: u64;
+        // SAFETY: DAIF is readable from privileged EL1 code.
+        unsafe { core::arch::asm!("mrs {value}, daif", value = out(reg) daif, options(nomem, nostack, preserves_flags)); }
+        daif & (1 << 7) == 0
+    }
+
+    fn logical_cpu_id() -> u64 {
+        // Keep the affinity fields (Aff3:Aff0), excluding MPIDR status/reserved bits.
+        mpidr_el1() & 0x0000_00ff_00ff_ffff
+    }
+
+    fn halt_forever() -> ! { halt() }
+
+    unsafe fn activate_address_space(root_phys: u64) {
+        // SAFETY: forwarded from the trait caller; this also performs the required TLB flush.
+        unsafe {
+            write_ttbr0_el1(root_phys);
+            invalidate_tlb_all_el1();
+        }
+    }
+
+    unsafe fn invalidate_tlb_all() {
+        // SAFETY: forwarded from the trait caller.
+        unsafe { invalidate_tlb_all_el1(); }
+    }
+}
