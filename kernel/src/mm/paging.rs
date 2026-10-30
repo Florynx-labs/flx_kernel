@@ -320,13 +320,16 @@ impl AddressSpace {
                 return Err(error);
             }
         };
-        // Keep the upper-half supervisor mappings (including the physical-memory map) and
-        // the kernel image's lower-half PML4 slot. This kernel is linked at 0x10000000000,
-        // which is PML4 index 2. Do not copy other lower-half slots: user code (index 0) and
-        // the user stack (index 255) need private page-table trees, not shared bootloader tables.
-        // Clear USER on inherited root entries so kernel mappings remain supervisor-only.
+        // Preserve the kernel image mapping (PML4 index 2) and the physical-memory map.
+        // The latter is not guaranteed to live in the upper canonical half: this bootloader
+        // uses phys_offset=0x18000000000 (PML4 index 3), so omitting that slot faults as soon
+        // as page-table/frame access uses phys_offset + physical_address after the CR3 switch.
+        // Keep all upper-half mappings too, but leave user code (index 0) and the user stack
+        // (index 255) private instead of inheriting the bootloader's lower-half mappings.
+        // Clear USER on every inherited root entry so kernel mappings remain supervisor-only.
+        let phys_map_index = indices(phys_offset)[0];
         for index in 0..ENTRY_COUNT {
-            if index < ENTRY_COUNT / 2 && index != 2 {
+            if index < ENTRY_COUNT / 2 && index != 2 && index != phys_map_index {
                 continue;
             }
             let entry = unsafe { read_volatile(&(*source)[index]) };
@@ -587,7 +590,13 @@ fn validate_user_page_address(address: u64) -> Result<(), PagingError> {
 unsafe fn free_user_subtree(table_phys: u64, phys_offset: u64) -> Result<(), PagingError> {
     // SAFETY: callers pass page-table frames allocated for this address space.
     let table_ptr = phys_offset.checked_add(table_phys).ok_or(PagingError::AddressOverflow)? as *mut [u64; ENTRY_COUNT];
+    let phys_map_index = indices(phys_offset)[0];
     for index in 0..(ENTRY_COUNT / 2) {
+        // These lower-half slots are inherited supervisor mappings, not owned user trees.
+        // Never recurse into or free the shared kernel image or physical-memory map.
+        if index == 2 || index == phys_map_index {
+            continue;
+        }
         let entry = unsafe { read_volatile(&(*table_ptr)[index]) };
         if entry & PRESENT == 0 {
             continue;
@@ -740,6 +749,7 @@ mod tests {
     fn splits_virtual_address_into_four_indices() {
         assert_eq!(indices(0), [0, 0, 0, 0]);
         assert_eq!(indices(0x0000_7fff_ffff_f000), [255, 511, 511, 511]);
+        assert_eq!(indices(0x0000_0180_0000_0000), [3, 0, 0, 0]);
         assert_eq!(indices(0xffff_8000_0000_0000), [256, 0, 0, 0]);
     }
 

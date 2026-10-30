@@ -31,14 +31,15 @@ class AddressSpaceContractTests(unittest.TestCase):
     def test_new_root_preserves_kernel_slots_but_keeps_user_slots_private(self):
         body = function_body(PAGING, "pub unsafe fn new(phys_offset: u64)")
         self.assertIn("for index in 0..ENTRY_COUNT", body)
-        self.assertIn("index < ENTRY_COUNT / 2 && index != 2", body)
+        self.assertIn("let phys_map_index = indices(phys_offset)[0];", body)
+        self.assertIn("index < ENTRY_COUNT / 2 && index != 2 && index != phys_map_index", body)
         self.assertIn("entry & !USER", body)
         self.assertIn("frame::alloc_frame()", body)
         # The kernel image lives in lower-half PML4 slot 2, but user code (0)
         # and user stack (255) must not inherit bootloader page-table trees.
-        self.assertIn("which is PML4 index 2", body)
-        self.assertIn("user code (index 0) and", body)
-        self.assertIn("user stack (index 255)", body)
+        self.assertIn("Preserve the kernel image mapping (PML4 index 2)", body)
+        self.assertIn("leave user code (index 0) and the user stack", body)
+        self.assertIn("index 255", body)
 
     def test_user_pages_are_lower_half_and_nonzero(self):
         body = function_body(PAGING, "fn validate_user_page_address(address: u64)")
@@ -60,6 +61,7 @@ class AddressSpaceContractTests(unittest.TestCase):
         self.assertIn("0..(ENTRY_COUNT / 2)", body)
         self.assertIn("free_user_table_level", body)
         self.assertIn("frame::free_frame", PAGING)
+        self.assertIn("if index == 2 || index == phys_map_index", body)
 
 
 if __name__ == "__main__":

@@ -74,6 +74,7 @@ pub fn init() {
             let ist = match vector {
                 2 => gdt::NMI_IST,           // NMI
                 8 => gdt::DOUBLE_FAULT_IST,  // #DF
+                14 => gdt::PAGE_FAULT_IST,   // #PF: diagnose even if the current stack is broken
                 _ => 0,
             };
             // Breakpoint (#BP, int3) may be raised from user mode later on.

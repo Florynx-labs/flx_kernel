@@ -28,6 +28,8 @@ const TSS_SELECTOR: u16 = 0x28;
 pub const DOUBLE_FAULT_IST: u8 = 1;
 /// IST slot (1-based) used for the NMI handler.
 pub const NMI_IST: u8 = 2;
+/// IST slot (1-based) used for page faults, so diagnostics survive a broken task stack.
+pub const PAGE_FAULT_IST: u8 = 3;
 
 const IST_STACK_SIZE: usize = 4096 * 5;
 
@@ -36,6 +38,7 @@ struct IstStack([u8; IST_STACK_SIZE]);
 
 static mut DOUBLE_FAULT_STACK: IstStack = IstStack([0; IST_STACK_SIZE]);
 static mut NMI_STACK: IstStack = IstStack([0; IST_STACK_SIZE]);
+static mut PAGE_FAULT_STACK: IstStack = IstStack([0; IST_STACK_SIZE]);
 
 /// 64-bit Task State Segment (Intel SDM Vol. 3, 7.7).
 #[repr(C, packed)]
@@ -110,9 +113,11 @@ pub fn init() {
         // IST stacks grow downward: point at the top of each region.
         let df_top = addr_of_mut!(DOUBLE_FAULT_STACK) as u64 + IST_STACK_SIZE as u64;
         let nmi_top = addr_of_mut!(NMI_STACK) as u64 + IST_STACK_SIZE as u64;
+        let page_fault_top = addr_of_mut!(PAGE_FAULT_STACK) as u64 + IST_STACK_SIZE as u64;
         let tss = addr_of_mut!(TSS);
         (*tss).ist[(DOUBLE_FAULT_IST - 1) as usize] = df_top;
         (*tss).ist[(NMI_IST - 1) as usize] = nmi_top;
+        (*tss).ist[(PAGE_FAULT_IST - 1) as usize] = page_fault_top;
 
         let (tss_low, tss_high) = tss_descriptor(tss as u64, (size_of::<Tss>() - 1) as u32);
 
