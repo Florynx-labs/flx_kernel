@@ -31,3 +31,9 @@ pub use mm::paging;
 // Exercise the production scheduler policy in the host-side unit-test harness.
 #[path = "../../../kernel/src/task/scheduler.rs"]
 pub mod scheduler;
+
+// Exercise x86_64 context-frame construction on the host without executing privileged
+// instructions or invoking the stack-switch assembly.
+#[cfg(target_arch = "x86_64")]
+#[path = "../../../kernel/src/arch/x86_64/context.rs"]
+pub mod x86_context;
