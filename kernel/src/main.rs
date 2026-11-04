@@ -16,6 +16,7 @@ pub mod mm;
 #[global_allocator]
 static GLOBAL_ALLOCATOR: mm::heap::KernelHeap = mm::heap::KernelHeap::new();
 pub mod sync;
+pub mod task;
 
 #[cfg(feature = "userspace-smoke")]
 mod user_smoke;
