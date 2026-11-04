@@ -134,3 +134,49 @@ flx_context_switch:
     .size flx_context_switch, .-flx_context_switch
     "#,
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    extern "C" fn never_returns() -> ! {
+        loop {
+            core::hint::spin_loop();
+        }
+    }
+
+    #[test]
+    fn initializes_aligned_system_v_stack_frame() {
+        let mut stack = vec![0xA5; 4096];
+        let mut context = TaskContext::empty();
+
+        // SAFETY: the test owns the dedicated stack for the context's entire lifetime.
+        unsafe { context.initialize(&mut stack, never_returns).unwrap() };
+
+        assert!(context.is_initialized());
+        assert_eq!(context.stack_pointer & 0xF, 0);
+        let words = unsafe {
+            core::slice::from_raw_parts(
+                context.stack_pointer as *const usize,
+                INITIAL_FRAME_WORDS,
+            )
+        };
+        assert_eq!(&words[..6], &[0; 6]);
+        assert_eq!(words[6], never_returns as usize);
+        assert_eq!(words[7], 0);
+        // Six pops followed by RET leave RSP at 8 mod 16 on function entry.
+        assert_eq!((context.stack_pointer + 7 * core::mem::size_of::<usize>()) & 0xF, 8);
+    }
+
+    #[test]
+    fn rejects_stack_too_small_without_publishing_context() {
+        let mut stack = vec![0u8; INITIAL_FRAME_BYTES + 15];
+        let mut context = TaskContext::empty();
+
+        // SAFETY: the stack is exclusively owned; initialization must reject its size.
+        let result = unsafe { context.initialize(&mut stack, never_returns) };
+
+        assert_eq!(result, Err(ContextError::StackTooSmall));
+        assert!(!context.is_initialized());
+    }
+}
