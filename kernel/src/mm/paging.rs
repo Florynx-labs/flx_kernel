@@ -338,6 +338,33 @@ impl AddressSpace {
             }
         }
 
+        // Verify the newly constructed root can still reach its own page through the
+        // inherited physical-memory mapping. This is the first physical access performed
+        // after CR3 changes, so fail during preparation rather than faulting in Ring 3.
+        let probe_virtual = match phys_offset.checked_add(root_phys) {
+            Some(address) => address,
+            None => {
+                let _ = frame::free_frame(root_phys);
+                return Err(PagingError::AddressOverflow);
+            }
+        };
+        let candidate = ActivePageTable { root_phys, phys_offset };
+        match candidate.translate(probe_virtual) {
+            Ok(Some(mapped)) if mapped == root_phys => {}
+            Ok(Some(_)) => {
+                let _ = frame::free_frame(root_phys);
+                return Err(PagingError::InvalidPageTable);
+            }
+            Ok(None) => {
+                let _ = frame::free_frame(root_phys);
+                return Err(PagingError::NotMapped);
+            }
+            Err(error) => {
+                let _ = frame::free_frame(root_phys);
+                return Err(error);
+            }
+        }
+
         Ok(Self {
             root_phys,
             phys_offset,
@@ -378,6 +405,11 @@ impl AddressSpace {
 
     pub fn root_physical_address(&self) -> u64 {
         self.root_phys
+    }
+
+    /// Returns the bootloader-provided physical-memory mapping offset.
+    pub const fn physical_memory_offset(&self) -> u64 {
+        self.phys_offset
     }
 
     pub fn mapped_user_pages(&self) -> usize {
