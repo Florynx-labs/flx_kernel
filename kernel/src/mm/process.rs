@@ -104,6 +104,13 @@ impl UserProcess {
         // The final CR3 switch happens inside the non-returning assembly transition, after
         // RSP moves off this Rust frame and onto the kernel stack mapped in both address spaces.
         let root_phys = self.address_space.root_physical_address();
+        let phys_offset = self.address_space.physical_memory_offset();
+        crate::kinfo!(
+            "Ring 3 address space: root={:#x}, phys_offset={:#x}, physmap PML4 index={}",
+            root_phys,
+            phys_offset,
+            (phys_offset >> 39) & 0x1ff
+        );
         // SAFETY: entry, user stack, root, and dedicated kernel stack were prepared above.
         unsafe { usermode::enter_user_mode(root_phys, self.entry, self.user_stack) }
     }
