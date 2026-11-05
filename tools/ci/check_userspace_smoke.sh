@@ -6,14 +6,31 @@ set -uo pipefail
 TIMEOUT="${1:-90}"
 LOG_RAW="userspace-serial.raw.log"
 LOG="userspace-serial.log"
+KERNEL_ELF="target/x86_64-unknown-none/debug/flx-kernel"
 
 timeout "${TIMEOUT}" cargo run --package flx-runner -- --userspace-smoke -display none -no-reboot > "${LOG_RAW}" 2>&1
 status=$?
-sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g' "${LOG_RAW}" > "${LOG}"
+sed -e 's/\\x1b\\[[0-9;]*m//g' -e 's/\\r//g' "${LOG_RAW}" > "${LOG}"
 
 echo "================ userspace serial log ================"
 cat "${LOG}"
 echo "======================================================="
+
+# Keep debug symbols in the CI build and translate every reported kernel RIP into
+# a Rust function/source location. This makes nested faults actionable instead of
+# requiring a maintainer to reproduce the exact runner image locally.
+if [ -f "${KERNEL_ELF}" ] && command -v addr2line >/dev/null 2>&1; then
+  addresses=$(grep -oE 'RIP=0x[0-9a-fA-F]+' "${LOG}" | cut -d= -f2 | sort -u || true)
+  if [ -n "${addresses}" ]; then
+    echo "================ kernel RIP symbols =================="
+    while IFS= read -r address; do
+      [ -n "${address}" ] || continue
+      echo "${address}"
+      addr2line -e "${KERNEL_ELF}" -f -C "${address}" || true
+    done <<< "${addresses}"
+    echo "======================================================="
+  fi
+fi
 
 if [ "${status}" -ne 124 ]; then
   python3 tools/ci/annotate.py "${LOG}" "userspace smoke: runner exited early (status ${status})" 7000
