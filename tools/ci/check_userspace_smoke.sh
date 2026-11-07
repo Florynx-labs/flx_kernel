@@ -35,16 +35,10 @@ if [ -f "${KERNEL_ELF}" ] && command -v addr2line >/dev/null 2>&1; then
     fi
     while IFS= read -r address; do
       [ -n "${address}" ] || continue
-      normalized=$(python3 - "${address}" "${relocation}" <<'PY'
-import sys
-rip = int(sys.argv[1], 16)
-offset = int(sys.argv[2], 16)
-if rip < offset:
-    print(f"0x{rip:x}")
-else:
-    print(f"0x{rip - offset:x}")
-PY
-)
+      normalized=$(python3 tools/ci/symbolize_rip.py "${address}" "0x${relocation}") || {
+        echo "WARNING: could not normalize ${address}; skipping symbol lookup."
+        continue
+      }
       echo "${address} -> linked VA ${normalized}"
       addr2line -e "${KERNEL_ELF}" -f -C "${normalized}" || true
     done <<< "${addresses}"
