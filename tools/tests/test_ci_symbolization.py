@@ -7,6 +7,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / "tools/ci/symbolize_rip.py"
+SMOKE = (ROOT / "tools/ci/check_userspace_smoke.sh").read_text(encoding="utf-8")
+BOOT = (ROOT / "tools/ci/check_boot.sh").read_text(encoding="utf-8")
 
 
 class RipSymbolizationTests(unittest.TestCase):
