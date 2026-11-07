@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import subprocess
+import re
 import sys
 import unittest
 
@@ -44,6 +45,18 @@ class RipSymbolizationTests(unittest.TestCase):
     def test_boot_script_checks_heap_growth_and_paging(self):
         self.assertIn('require "[OK   ] Heap growth self-test ("', BOOT)
         self.assertIn('require "[OK   ] Paging (active CR3"', BOOT)
+
+    def test_smoke_script_extracts_the_relocation_offset_from_boot_log(self):
+        match = re.search(r"relocation=\\$\\(sed -nE '([^']+)'", SMOKE)
+        self.assertIsNotNone(match, "relocation sed expression missing")
+        result = subprocess.run(
+            ["sed", "-nE", match.group(1)],
+            input="INFO : virtual_address_offset: 0x10000000000\\n",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(result.stdout.strip(), "10000000000")
 
 
 if __name__ == "__main__":
