@@ -4,11 +4,25 @@
 //! and Framebuffer graphics console (with 24-bit RGB colors).
 
 use core::fmt;
+use core::sync::atomic::{AtomicBool, Ordering};
 use log::{Level, LevelFilter, Metadata, Record};
 use crate::framebuffer::{self, Color};
 
 /// Static kernel logger instance.
 pub static LOGGER: KernelLogger = KernelLogger;
+
+/// Disables framebuffer output after entering an address space that does not inherit it.
+static SERIAL_ONLY: AtomicBool = AtomicBool::new(false);
+
+/// Switches kernel diagnostics to the always-available serial console.
+pub fn set_serial_only() {
+    SERIAL_ONLY.store(true, Ordering::Release);
+}
+
+/// Returns whether diagnostics are restricted to serial output.
+pub fn serial_only() -> bool {
+    SERIAL_ONLY.load(Ordering::Acquire)
+}
 
 /// Initializes the kernel logging system with the given maximum level.
 pub fn init(max_level: LevelFilter) {
