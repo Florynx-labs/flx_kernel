@@ -52,6 +52,7 @@ impl log::Log for KernelLogger {
 
         // 1. Serial COM1 with ANSI colors
         crate::serial_println!("{}[{}]\x1b[0m {}", serial_color, tag, record.args());
+        if serial_only() { return; }
 
         // 2. Framebuffer with RGB colors
         framebuffer::set_color(fb_color);
@@ -67,6 +68,7 @@ impl log::Log for KernelLogger {
 pub fn log_status(tag: &str, fb_color: Color, serial_ansi: &str, args: fmt::Arguments) {
     // Serial
     crate::serial_println!("{}[{}]\x1b[0m {}", serial_ansi, tag, args);
+    if serial_only() { return; }
 
     // Framebuffer
     framebuffer::set_color(fb_color);
