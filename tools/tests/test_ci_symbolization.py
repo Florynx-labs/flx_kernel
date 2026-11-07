@@ -1,8 +1,8 @@
 """Tests for the CI runtime-to-linked-address normalization helper."""
 
 from pathlib import Path
-import subprocess
 import re
+import subprocess
 import sys
 import unittest
 
@@ -47,11 +47,11 @@ class RipSymbolizationTests(unittest.TestCase):
         self.assertIn('require "[OK   ] Paging (active CR3"', BOOT)
 
     def test_smoke_script_extracts_the_relocation_offset_from_boot_log(self):
-        match = re.search(r"relocation=\\$\\(sed -nE '([^']+)'", SMOKE)
+        match = re.search(r"relocation=\$\(sed -nE '([^']+)'", SMOKE)
         self.assertIsNotNone(match, "relocation sed expression missing")
         result = subprocess.run(
             ["sed", "-nE", match.group(1)],
-            input="INFO : virtual_address_offset: 0x10000000000\\n",
+            input="INFO : virtual_address_offset: 0x10000000000\n",
             capture_output=True,
             text=True,
             check=True,
