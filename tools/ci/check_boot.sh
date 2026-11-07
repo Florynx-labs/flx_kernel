@@ -9,7 +9,7 @@ LOG="boot-serial.log"
 
 # The runner builds the kernel, creates the UEFI image and launches QEMU (serial on stdout).
 # -no-reboot: a triple fault makes QEMU exit instead of looping forever.
-timeout "${TIMEOUT}" cargo run --package flx-runner -- -display none -no-reboot > "${LOG_RAW}" 2>&1
+timeout --signal=TERM --kill-after=5s "${TIMEOUT}" cargo run --package flx-runner -- -display none -no-reboot > "${LOG_RAW}" 2>&1
 status=$?
 
 # Strip ANSI color codes and carriage returns for stable matching.
@@ -45,8 +45,11 @@ require "[OK   ] GDT + TSS"
 require "[OK   ] IDT + CPU exceptions"
 require "[OK   ] Frame allocator ("
 require "[OK   ] Frame allocator self-test"
+require "[OK   ] Heap growth ("
+require "[OK   ] Heap growth self-test ("
 require "[OK   ] Timer IRQ"
 require "[OK   ] Keyboard IRQ"
+require "[OK   ] Paging (active CR3"
 require "[OK] Kernel initialized."
 
 forbid "FLX KERNEL PANIC"
