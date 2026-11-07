@@ -35,6 +35,16 @@ class RipSymbolizationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("below the kernel relocation base", result.stderr)
 
+    def test_smoke_script_uses_relocation_helper_and_requires_real_marker(self):
+        self.assertIn("tools/ci/symbolize_rip.py", SMOKE)
+        self.assertIn('grep -qF -- "FLX USERSPACE: PASS"', SMOKE)
+        self.assertIn('[ "${status}" -ne 124 ]', SMOKE)
+        self.assertIn("timeout is only a bounded stop mechanism", SMOKE)
+
+    def test_boot_script_checks_heap_growth_and_paging(self):
+        self.assertIn('require "[OK   ] Heap growth self-test ("', BOOT)
+        self.assertIn('require "[OK   ] Paging (active CR3"', BOOT)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
