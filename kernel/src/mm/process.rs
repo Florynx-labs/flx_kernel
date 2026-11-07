@@ -7,9 +7,12 @@
 use crate::arch::x86_64::usermode::{self, UserModeError};
 use crate::mm::elf_loader::{self, ElfLoadError};
 use crate::mm::paging::{AddressSpace, PagingError};
+use core::mem::{ManuallyDrop, MaybeUninit};
 use core::sync::atomic::{AtomicPtr, Ordering};
 
-// Single-task bring-up context. Published only by UserProcess::enter, which never returns.
+// Single-task bring-up context. The owner lives in kernel .bss, not on the boot stack:
+// the process page tables intentionally do not inherit the bootloader stack mapping.
+static mut CURRENT_ADDRESS_SPACE_STORAGE: MaybeUninit<AddressSpace> = MaybeUninit::uninit();
 static CURRENT_ADDRESS_SPACE: AtomicPtr<AddressSpace> = AtomicPtr::new(core::ptr::null_mut());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,25 +97,34 @@ impl UserProcess {
     /// initialized, and no other CPU may use or destroy this address space. This function never
     /// returns.
     pub unsafe fn enter(self) -> ! {
-        // This process object remains alive because enter_user_mode never returns. The prototype
-        // is single-task/single-core; a future scheduler must replace this global with task-local
-        // syscall context and per-thread kernel stacks.
-        CURRENT_ADDRESS_SPACE.store(
-            core::ptr::addr_of!(self.address_space).cast_mut(),
-            Ordering::Release,
-        );
-        // The final CR3 switch happens inside the non-returning assembly transition, after
-        // RSP moves off this Rust frame and onto the kernel stack mapped in both address spaces.
-        let root_phys = self.address_space.root_physical_address();
-        let phys_offset = self.address_space.physical_memory_offset();
+        // Keep the address-space owner at a stable kernel-image address. A pointer to
+        // `self.address_space` would point into the boot stack, which is deliberately
+        // absent from the isolated process root; the first syscall would then fault.
+        let process = ManuallyDrop::new(self);
+        let entry = process.entry;
+        let user_stack = process.user_stack;
+        // SAFETY: ManuallyDrop prevents the old stack-resident UserProcess from dropping
+        // the moved address space. This one-shot static slot is initialized exactly once
+        // by the single-task bring-up path and remains alive for the kernel lifetime.
+        let address_space = unsafe { core::ptr::read(&process.address_space) };
+        let storage = core::ptr::addr_of_mut!(CURRENT_ADDRESS_SPACE_STORAGE).cast::<AddressSpace>();
+        unsafe { storage.write(address_space); }
+        CURRENT_ADDRESS_SPACE.store(storage, Ordering::Release);
+
+        let root_phys = unsafe { (*storage).root_physical_address() };
+        let phys_offset = unsafe { (*storage).physical_memory_offset() };
         crate::kinfo!(
-            "Ring 3 address space: root={:#x}, phys_offset={:#x}, physmap PML4 index={}",
+            "Ring 3 address space: root={:#x}, phys_offset={:#x}, physmap PML4 index={}, context={:#x}",
             root_phys,
             phys_offset,
-            (phys_offset >> 39) & 0x1ff
+            (phys_offset >> 39) & 0x1ff,
+            storage as u64
         );
+        // Once CR3 changes, diagnostics must not write to the bootloader framebuffer mapping:
+        // it lives in a lower-half slot intentionally not inherited by this process root.
+        crate::logging::set_serial_only();
         // SAFETY: entry, user stack, root, and dedicated kernel stack were prepared above.
-        unsafe { usermode::enter_user_mode(root_phys, self.entry, self.user_stack) }
+        unsafe { usermode::enter_user_mode(root_phys, entry, user_stack) }
     }
 }
 
