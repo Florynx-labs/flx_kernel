@@ -23,6 +23,9 @@ pub trait CpuArchitecture {
     /// Stop execution permanently on the current CPU.
     fn halt_forever() -> !;
 
+    /// Whether the architecture has enabled the execute-never permission used by this VM backend.
+    fn nx_enabled() -> bool;
+
     /// Read the active address-space root as a physical address.
     fn current_address_space_root() -> u64;
 
