@@ -1,0 +1,10 @@
+[package]
+name = "flx-aarch64-uefi-smoke"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "BOOTAA64"
+path = "src/main.rs"
