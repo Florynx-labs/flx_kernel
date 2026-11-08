@@ -66,11 +66,16 @@ pub unsafe fn init_physical_timer_ppi() -> Result<(), GicError> {
 
     // Enable the EL1 system-register interface and permit Group 1 interrupts.
     unsafe {
+        let sre: u64;
         core::arch::asm!(
-            "mrs x9, ICC_SRE_EL1",
-            "orr x9, x9, #1",
-            "msr ICC_SRE_EL1, x9",
+            "mrs {sre}, ICC_SRE_EL1",
+            "orr {sre}, {sre}, #1",
+            "msr ICC_SRE_EL1, {sre}",
             "isb",
+            sre = out(reg) sre,
+            options(nostack, preserves_flags)
+        );
+        core::arch::asm!(
             "msr ICC_PMR_EL1, {pmr}",
             "msr ICC_BPR1_EL1, xzr",
             "msr ICC_IGRPEN1_EL1, {enable}",
