@@ -12,3 +12,8 @@ pub mod arch {
     pub use crate::aarch64;
     pub use crate::interface;
 }
+
+// Compile the real shared spinlock against the AArch64 implementation. This catches
+// accidental x86-only dependencies in common synchronization code.
+#[path = "../../../kernel/src/sync/spinlock.rs"]
+pub mod spinlock;
