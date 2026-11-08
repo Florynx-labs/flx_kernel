@@ -109,19 +109,21 @@ pub extern "efiapi" fn efi_main(
         <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
     }
 
+    serial_write(b"FLX AARCH64 TIMER: INIT\r\n");
     if unsafe { arch::aarch64::timer::init_periodic(10) }.is_err() {
         serial_write(b"FLX AARCH64 TIMER: INIT FAIL\r\n");
         <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
     }
-    let deadline = arch::aarch64::timer::counter()
-        .saturating_add(arch::aarch64::timer::frequency().saturating_mul(2));
-    while arch::aarch64::timer::ticks() < 3
-        && arch::aarch64::timer::counter() < deadline
-    {
-        // The configured EL1 physical timer IRQ wakes this WFI.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)); }
+    serial_write(b"FLX AARCH64 TIMER: READY\r\n");
+    // Bounded guest-side polling keeps the smoke test diagnosable even if an IRQ is lost.
+    for _ in 0..100_000_000 {
+        if arch::aarch64::timer::ticks() >= 3 {
+            break;
+        }
+        core::hint::spin_loop();
     }
     let ticks = arch::aarch64::timer::ticks();
+    serial_write_hex(b"TIMER_TICKS=0x", ticks);
     arch::aarch64::timer::stop();
     if ticks >= 3 {
         serial_write(b"FLX AARCH64 TIMER: PASS\r\n");
