@@ -55,6 +55,14 @@ if [[ "$(grep -cF 'FLX AARCH64 UEFI BOOT: PASS' "$LOG")" -ne 1 ]]; then
   echo "::error::AArch64 UEFI boot marker missing or duplicated"
   exit 1
 fi
+if [[ "$(grep -cF 'FLX AARCH64 EXCEPTION: PASS' "$LOG")" -ne 1 ]]; then
+  echo "::error::AArch64 controlled exception test did not pass exactly once"
+  exit 1
+fi
+if grep -qF 'FLX AARCH64 EXCEPTION: FAIL' "$LOG"; then
+  echo "::error::AArch64 controlled exception test failed"
+  exit 1
+fi
 if grep -qF 'FLX AARCH64 UEFI BOOT: PANIC' "$LOG"; then
   echo "::error::AArch64 UEFI image panicked"
   exit 1
