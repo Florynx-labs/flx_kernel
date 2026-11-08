@@ -106,6 +106,27 @@ pub extern "efiapi" fn efi_main(
         serial_write(b"FLX AARCH64 EXCEPTION: PASS\r\n");
     } else {
         serial_write(b"FLX AARCH64 EXCEPTION: FAIL\r\n");
+        <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
+    }
+
+    if unsafe { arch::aarch64::timer::init_periodic(10) }.is_err() {
+        serial_write(b"FLX AARCH64 TIMER: INIT FAIL\r\n");
+        <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
+    }
+    let deadline = arch::aarch64::timer::counter()
+        .saturating_add(arch::aarch64::timer::frequency().saturating_mul(2));
+    while arch::aarch64::timer::ticks() < 3
+        && arch::aarch64::timer::counter() < deadline
+    {
+        // The configured EL1 physical timer IRQ wakes this WFI.
+        unsafe { core::arch::asm!("wfi", options(nomem, nostack)); }
+    }
+    let ticks = arch::aarch64::timer::ticks();
+    arch::aarch64::timer::stop();
+    if ticks >= 3 {
+        serial_write(b"FLX AARCH64 TIMER: PASS\r\n");
+    } else {
+        serial_write(b"FLX AARCH64 TIMER: FAIL\r\n");
     }
     <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever()
 }
