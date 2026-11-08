@@ -25,6 +25,31 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn('cfg(target_arch = "aarch64")', source)
         self.assertIn("interface::CpuArchitecture", source)
 
+    def test_aarch64_el1_vectors_cover_all_exception_classes(self):
+        source = (ROOT / "kernel/src/arch/aarch64/exceptions.rs").read_text()
+        self.assertIn(".balign 2048", source)
+        self.assertIn("msr VBAR_EL1", source)
+        self.assertIn("ESR_EL1", source)
+        self.assertIn("ELR_EL1", source)
+        self.assertIn("FAR_EL1", source)
+        self.assertIn("__flx_aarch64_irq_entry", source)
+        self.assertIn("__flx_aarch64_fiq_entry", source)
+        self.assertIn("__flx_aarch64_serror_entry", source)
+        self.assertIn("stp x28, x29", source)
+        self.assertIn("eret", source)
+
+    def test_aarch64_timer_and_gic_use_real_irq_path(self):
+        gic = (ROOT / "kernel/src/arch/aarch64/gic.rs").read_text()
+        timer = (ROOT / "kernel/src/arch/aarch64/timer.rs").read_text()
+        exceptions = (ROOT / "kernel/src/arch/aarch64/exceptions.rs").read_text()
+        self.assertIn("GICR_WAKER", gic)
+        self.assertIn("ICC_IAR1_EL1", gic)
+        self.assertIn("ICC_EOIR1_EL1", gic)
+        self.assertIn("CNTP_TVAL_EL0", timer)
+        self.assertIn("CNTFRQ_EL0", timer)
+        self.assertIn("__flx_aarch64_irq_dispatch", exceptions)
+        self.assertIn("super::timer::handle_interrupt(interrupt_id)", exceptions)
+
     def test_aarch64_spinlock_masks_only_irq_and_preserves_daif_state(self):
         source = (ROOT / "kernel/src/arch/aarch64/mod.rs").read_text()
         self.assertIn('asm!("msr daifset, #2"', source)
