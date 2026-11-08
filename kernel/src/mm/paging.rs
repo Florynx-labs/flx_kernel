@@ -5,6 +5,7 @@
 //! Physical page-table frames are accessed through the bootloader's physical-memory map.
 
 use crate::mm::frame::{self, FRAME_SIZE};
+use crate::arch;
 
 const ENTRY_COUNT: usize = 512;
 const PRESENT: u64 = 1 << 0;
@@ -66,9 +67,7 @@ impl ActivePageTable {
     /// phys_offset must be a valid writable mapping for all physical addresses used
     /// by the active page tables and physical frame allocator.
     pub unsafe fn current(phys_offset: u64) -> Self {
-        let cr3: u64;
-        core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags));
-        Self { root_phys: cr3 & CR3_ADDRESS_MASK, phys_offset }
+        Self { root_phys: arch::current_address_space_root() & CR3_ADDRESS_MASK, phys_offset }
     }
 
     /// Returns the physical address backing a virtual address, including the page offset.
@@ -770,7 +769,8 @@ unsafe fn write_volatile<T>(ptr: *mut T, value: T) {
 
 #[inline]
 fn flush_tlb_page(address: u64) {
-    unsafe { core::arch::asm!("invlpg [{}]", in(reg) address, options(nostack, preserves_flags)); }
+    // SAFETY: The active x86_64 page-table mutation path owns this address and flushes locally.
+    unsafe { arch::invalidate_tlb_page(address); }
 }
 
 #[cfg(test)]
