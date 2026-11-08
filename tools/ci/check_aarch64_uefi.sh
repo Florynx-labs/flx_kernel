@@ -38,7 +38,7 @@ cp target/aarch64-unknown-uefi/release/BOOTAA64.efi "$ESP/EFI/BOOT/BOOTAA64.EFI"
 
 set +e
 timeout --signal=TERM --kill-after=5s "$TIMEOUT" qemu-system-aarch64 \
-  -machine virt -cpu cortex-a57 -m 512M -nographic -no-reboot \
+  -machine virt -cpu cortex-a57 -m 512M -nographic -no-reboot -net none \
   -drive if=pflash,format=raw,readonly=on,file="$CODE_FD" \
   -drive if=pflash,format=raw,file="$VARS_COPY" \
   -drive format=raw,file="fat:rw:$ESP" \
