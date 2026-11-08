@@ -111,6 +111,18 @@ impl crate::arch::interface::CpuArchitecture for X86_64 {
 
     fn halt_forever() -> ! { halt_loop() }
 
+    fn current_address_space_root() -> u64 {
+        let root: u64;
+        // SAFETY: Reading CR3 is a privileged, side-effect-free register read.
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) root, options(nomem, nostack, preserves_flags)); }
+        root & 0x000f_ffff_ffff_f000
+    }
+
+    unsafe fn invalidate_tlb_page(address: u64) {
+        // SAFETY: The caller guarantees the active translation context and shootdown protocol.
+        unsafe { core::arch::asm!("invlpg [{}]", in(reg) address, options(nostack, preserves_flags)); }
+    }
+
     unsafe fn activate_address_space(root_phys: u64) {
         assert_eq!(root_phys & 0xfff, 0, "CR3 root must be 4 KiB aligned");
         // SAFETY: upheld by the trait caller's contract.
