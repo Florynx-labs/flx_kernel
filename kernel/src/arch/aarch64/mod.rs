@@ -110,6 +110,28 @@ impl crate::arch::interface::CpuArchitecture for AArch64 {
 
     fn halt_forever() -> ! { halt() }
 
+    fn current_address_space_root() -> u64 {
+        let root: u64;
+        // SAFETY: TTBR0_EL1 is readable by privileged EL1 code.
+        unsafe { core::arch::asm!("mrs {root}, TTBR0_EL1", root = out(reg) root, options(nomem, nostack, preserves_flags)); }
+        root & 0x0000_ffff_ffff_f000
+    }
+
+    unsafe fn invalidate_tlb_page(address: u64) {
+        let va = address >> 12;
+        // SAFETY: Caller coordinates mapping mutation and remote shootdowns.
+        unsafe {
+            core::arch::asm!(
+                "dsb ishst",
+                "tlbi vaae1is, {va}",
+                "dsb ish",
+                "isb",
+                va = in(reg) va,
+                options(nostack, preserves_flags)
+            );
+        }
+    }
+
     unsafe fn activate_address_space(root_phys: u64) {
         // SAFETY: forwarded from the trait caller; this also performs the required TLB flush.
         unsafe {
