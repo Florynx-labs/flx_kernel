@@ -16,18 +16,18 @@ pub fn halt() -> ! {
     }
 }
 
-/// Masks IRQ, FIQ, SError, and debug exceptions at the current exception level.
+/// Masks IRQ exceptions only, preserving the caller's FIQ, SError, and debug mask state.
 #[cfg(target_arch = "aarch64")]
 pub fn disable_interrupts() {
     // SAFETY: DAIFSet is available to privileged kernel code.
-    unsafe { core::arch::asm!("msr daifset, #0xf", options(nomem, nostack, preserves_flags)); }
+    unsafe { core::arch::asm!("msr daifset, #2", options(nomem, nostack, preserves_flags)); }
 }
 
-/// Unmasks IRQ, FIQ, SError, and debug exceptions at the current exception level.
+/// Unmasks IRQ exceptions only; other DAIF mask bits are left unchanged.
 #[cfg(target_arch = "aarch64")]
 pub fn enable_interrupts() {
     // SAFETY: DAIFClr is available to privileged kernel code.
-    unsafe { core::arch::asm!("msr daifclr, #0xf", options(nomem, nostack, preserves_flags)); }
+    unsafe { core::arch::asm!("msr daifclr, #2", options(nomem, nostack, preserves_flags)); }
 }
 
 /// Returns the current exception level (EL0–EL3).
