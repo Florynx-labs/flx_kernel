@@ -1,6 +1,18 @@
 //! Host-side test harness for pure memory-management algorithms.
 //! Kernel source modules are included directly so tests exercise production code.
 
+// Hardware-only operations are intentionally unavailable in the host test harness.
+// The pure page-table helpers can be tested; invoking these methods must fail loudly.
+pub mod arch {
+    pub fn current_address_space_root() -> u64 {
+        panic!("hardware address-space state is unavailable in host tests")
+    }
+
+    pub unsafe fn invalidate_tlb_page(_address: u64) {
+        panic!("hardware TLB invalidation is unavailable in host tests")
+    }
+}
+
 pub mod sync {
     use std::sync::{Mutex, MutexGuard};
 
