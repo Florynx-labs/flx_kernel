@@ -73,6 +73,20 @@ pub extern "efiapi" fn efi_main(
 ) -> usize {
     serial_init();
     serial_write(b"FLX AARCH64 UEFI BOOT: PASS\r\n");
+
+    // Install the production EL1 vector table while all exception classes remain masked.
+    if let Err(level) = unsafe { arch::aarch64::exceptions::install_el1_vectors() } {
+        serial_write(b"FLX AARCH64 EXCEPTION: WRONG EL\r\n");
+        let _ = level;
+        <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
+    }
+
+    arch::aarch64::exceptions::trigger_controlled_breakpoint();
+    if arch::aarch64::exceptions::controlled_exception_seen() {
+        serial_write(b"FLX AARCH64 EXCEPTION: PASS\r\n");
+    } else {
+        serial_write(b"FLX AARCH64 EXCEPTION: FAIL\r\n");
+    }
     <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever()
 }
 
