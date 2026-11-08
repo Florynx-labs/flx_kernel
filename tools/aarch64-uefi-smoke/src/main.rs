@@ -9,11 +9,14 @@ use core::panic::PanicInfo;
 use core::ptr::{read_volatile, write_volatile};
 
 // Compile the production AArch64 CPU contract and primitives into the firmware image.
+#[path = "../../../kernel/src/arch/interface.rs"]
+pub mod arch_interface;
+#[path = "../../../kernel/src/arch/aarch64/mod.rs"]
+pub mod arch_aarch64;
+
 pub mod arch {
-    #[path = "../../../kernel/src/arch/interface.rs"]
-    pub mod interface;
-    #[path = "../../../kernel/src/arch/aarch64/mod.rs"]
-    pub mod aarch64;
+    pub use crate::arch_aarch64 as aarch64;
+    pub use crate::arch_interface as interface;
 }
 
 use arch::interface::CpuArchitecture;
