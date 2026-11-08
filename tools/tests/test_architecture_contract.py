@@ -11,6 +11,12 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("arch::enable_local_interrupts()", source)
         self.assertNotIn("arch::x86_64", source)
 
+    def test_paging_delegates_privileged_register_operations(self):
+        source = (ROOT / "kernel/src/mm/paging.rs").read_text()
+        self.assertIn("arch::current_address_space_root()", source)
+        self.assertIn("arch::invalidate_tlb_page(address)", source)
+        self.assertNotIn("core::arch::asm!", source)
+
     def test_arch_facade_selects_target_implementation(self):
         source = (ROOT / "kernel/src/arch/mod.rs").read_text()
         self.assertIn('cfg(target_arch = "x86_64")', source)
