@@ -110,6 +110,12 @@ impl crate::arch::interface::CpuArchitecture for AArch64 {
 
     fn halt_forever() -> ! { halt() }
 
+    fn nx_enabled() -> bool {
+        // This x86 four-level paging backend's NX bit is not an AArch64 UXN/PXN descriptor.
+        // AArch64 must use its own translation-table backend before this capability is exposed.
+        false
+    }
+
     fn current_address_space_root() -> u64 {
         let root: u64;
         // SAFETY: TTBR0_EL1 is readable by privileged EL1 code.
