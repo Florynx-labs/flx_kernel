@@ -23,7 +23,7 @@ echo "======================================================="
 # exception logs are runtime VAs, while addr2line expects linked ELF VAs. Remove
 # that relocation before symbol lookup; feeding raw RIPs only produces ?? :0.
 if [ -f "${KERNEL_ELF}" ] && command -v addr2line >/dev/null 2>&1; then
-  relocation=$(sed -nE 's/.*virtual_address_offset: 0x([0-9a-fA-F]+).*/\\1/p' "${LOG}" | head -n 1)
+  relocation=$(sed -nE 's/.*virtual_address_offset: 0x([0-9a-fA-F]+).*/\1/p' "${LOG}" | head -n 1)
   addresses=$(grep -oE 'RIP=0x[0-9a-fA-F]+' "${LOG}" | cut -d= -f2 | sort -u || true)
   if [ -n "${addresses}" ]; then
     echo "================ kernel RIP symbols =================="
