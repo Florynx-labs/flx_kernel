@@ -7,6 +7,9 @@
 pub const ARCH_NAME: &str = "aarch64";
 pub const PAGE_SIZE: usize = 4096;
 
+#[cfg(target_arch = "aarch64")]
+pub mod exceptions;
+
 /// Waits for an interrupt/event forever.
 #[cfg(target_arch = "aarch64")]
 pub fn halt() -> ! {
