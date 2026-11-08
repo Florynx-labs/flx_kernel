@@ -1,24 +1,18 @@
-# FLX Kernel — Boot Subsystem Documentation
+# FLX Kernel — Boot subsystem
 
-## 1. Overview
-The boot subsystem of FLX Kernel coordinates early system bring-up under UEFI on `x86_64` hardware.
+## x86_64
 
-## 2. Boot Flow
-1. **UEFI Firmware Bring-Up**:
-   - The platform loads UEFI firmware (or OVMF under QEMU).
-   - UEFI discovers bootable media containing the EFI system partition (`ESP`).
-2. **Bootloader Invocation**:
-   - The bootloader EFI binary (`BOOTX64.EFI`) is executed.
-   - Bootloader queries UEFI Boot Services for:
-     - GOP (Graphics Output Protocol) -> linear framebuffer address, resolution, stride, format.
-     - UEFI Memory Map -> table of physical memory descriptors.
-     - ACPI tables -> RSDP address.
-   - Prepares identity page tables and loads the kernel ELF binary into 64-bit long mode.
-   - Exits UEFI Boot Services and invokes the kernel entry point: `kernel_main(&'static mut BootInfo)`.
-3. **Kernel Initialization**:
-   - `drivers::serial::SERIAL1.lock().init()`: Initializes COM1 at 115200 baud, 8N1.
-   - `framebuffer::init()`: Sets up the 8x16 monospace console.
-   - `logging::init()`: Enables simultaneous logging to COM1 and the graphical display.
-   - `arch::x86_64::cpu::get_cpu_vendor()`: Queries CPUID for processor vendor and model.
-   - `boot::KernelBootInfo::parse()`: Aggregates physical memory regions into usable/reserved counts.
-   - Enters safe CPU halt loop awaiting interrupts.
+The production kernel boot path currently uses the `bootloader_api` UEFI loader on x86_64. CI boots it under QEMU/OVMF and validates the serial log, including memory initialization, interrupts, paging, and the Ring 3 userspace smoke test.
+
+## AArch64 first-stage bring-up
+
+A separate `flx-aarch64-uefi-smoke` image is built for `aarch64-unknown-uefi` and installed at the standard removable-media path `EFI/BOOT/BOOTAA64.EFI`. The first-stage image initializes the QEMU virt PL011 UART at `0x09000000`, emits exactly one `FLX AARCH64 UEFI BOOT: PASS` marker, and waits.
+
+CI runs this image with AArch64 UEFI firmware under `qemu-system-aarch64 -machine virt`. This proves that an AArch64 UEFI application can be built, discovered, loaded, and executed by QEMU firmware. It is **not yet the full FLX kernel port**: the existing x86_64 `bootloader_api` entry point, memory initialization, exception vectors, timer/GIC, and scheduler are not wired into this image. Do not describe AArch64 as feature-complete or generally bootable until those stages are integrated and tested.
+
+## Validation levels
+
+- **Cross-compilation:** Rust emits the AArch64 UEFI PE/COFF image.
+- **Firmware boot:** QEMU UEFI loads the image from `EFI/BOOT/BOOTAA64.EFI`.
+- **Runtime marker:** PL011 serial output confirms entry into the AArch64 image.
+- **Full kernel boot:** remains a later milestone requiring memory, exception, interrupt, and kernel subsystem initialization.
