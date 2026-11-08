@@ -20,7 +20,6 @@ core::arch::global_asm!(
     .section .text
     .balign 2048
     .global __flx_aarch64_el1_vectors
-    .type __flx_aarch64_el1_vectors, %function
 __flx_aarch64_el1_vectors:
     .macro vector_entry handler
         b \handler
