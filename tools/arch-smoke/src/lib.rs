@@ -11,6 +11,19 @@ pub mod aarch64;
 pub mod arch {
     pub use crate::aarch64;
     pub use crate::interface;
+
+    #[inline]
+    pub fn local_interrupts_enabled() -> bool {
+        <aarch64::AArch64 as interface::CpuArchitecture>::interrupts_enabled()
+    }
+    #[inline]
+    pub fn disable_local_interrupts() {
+        <aarch64::AArch64 as interface::CpuArchitecture>::disable_interrupts()
+    }
+    #[inline]
+    pub fn enable_local_interrupts() {
+        <aarch64::AArch64 as interface::CpuArchitecture>::enable_interrupts()
+    }
 }
 
 // Compile the real shared spinlock against the AArch64 implementation. This catches
