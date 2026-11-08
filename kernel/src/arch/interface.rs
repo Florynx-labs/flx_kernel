@@ -23,6 +23,19 @@ pub trait CpuArchitecture {
     /// Stop execution permanently on the current CPU.
     fn halt_forever() -> !;
 
+    /// Whether the architecture has enabled the execute-never permission used by this VM backend.
+    fn nx_enabled() -> bool;
+
+    /// Read the active address-space root as a physical address.
+    fn current_address_space_root() -> u64;
+
+    /// Invalidate one virtual address on the current CPU.
+    ///
+    /// # Safety
+    /// The caller must ensure the address is valid for the active translation regime and
+    /// coordinate remote CPU shootdowns where the mapping is shared.
+    unsafe fn invalidate_tlb_page(address: u64);
+
     /// Install a new root page-table address space for the current CPU.
     ///
     /// # Safety

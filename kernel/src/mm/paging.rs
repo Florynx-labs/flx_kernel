@@ -5,6 +5,7 @@
 //! Physical page-table frames are accessed through the bootloader's physical-memory map.
 
 use crate::mm::frame::{self, FRAME_SIZE};
+use crate::arch;
 
 const ENTRY_COUNT: usize = 512;
 const PRESENT: u64 = 1 << 0;
@@ -66,9 +67,7 @@ impl ActivePageTable {
     /// phys_offset must be a valid writable mapping for all physical addresses used
     /// by the active page tables and physical frame allocator.
     pub unsafe fn current(phys_offset: u64) -> Self {
-        let cr3: u64;
-        core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags));
-        Self { root_phys: cr3 & CR3_ADDRESS_MASK, phys_offset }
+        Self { root_phys: arch::current_address_space_root() & CR3_ADDRESS_MASK, phys_offset }
     }
 
     /// Returns the physical address backing a virtual address, including the page offset.
@@ -122,7 +121,7 @@ impl ActivePageTable {
         }
         // Setting bit 63 in a PTE is reserved unless EFER.NXE is enabled.
         // Fail safely rather than turning an ordinary mapping into a reserved-bit fault.
-        if flags.no_execute && !nx_enabled() {
+        if flags.no_execute && !arch::nx_enabled() {
             return Err(PagingError::NxNotEnabled);
         }
 
@@ -586,13 +585,7 @@ impl AddressSpace {
     /// and must not switch away while holding locks whose data could be unmapped in this space.
     pub unsafe fn activate(&self) {
         // SAFETY: the root frame is page-aligned and populated by AddressSpace::new.
-        unsafe {
-            core::arch::asm!(
-                "mov cr3, {}",
-                in(reg) self.root_phys,
-                options(nostack, preserves_flags)
-            );
-        }
+        unsafe { arch::activate_address_space(self.root_phys); }
     }
 
     /// Destroys this address space and frees its user data frames and private page-table frames.
@@ -675,57 +668,6 @@ unsafe fn free_user_table_level(
     Ok(())
 }
 
-/// Returns whether the processor has NX support and the kernel has enabled EFER.NXE.
-#[inline]
-fn nx_enabled() -> bool {
-    let max_extended: u32;
-    unsafe {
-        core::arch::asm!(
-            "push rbx",
-            "cpuid",
-            "pop rbx",
-            inout("eax") 0x8000_0000u32 => max_extended,
-            lateout("ecx") _,
-            lateout("edx") _,
-            options(preserves_flags)
-        );
-    }
-    if max_extended < 0x8000_0001 {
-        return false;
-    }
-
-    let extended_features_edx: u32;
-    unsafe {
-        core::arch::asm!(
-            "push rbx",
-            "cpuid",
-            "pop rbx",
-            inout("eax") 0x8000_0001u32 => _,
-            lateout("ecx") _,
-            lateout("edx") extended_features_edx,
-            options(preserves_flags)
-        );
-    }
-    const CPUID_NX: u32 = 1 << 20;
-    if extended_features_edx & CPUID_NX == 0 {
-        return false;
-    }
-
-    let efer_low: u32;
-    let efer_high: u32;
-    unsafe {
-        core::arch::asm!(
-            "rdmsr",
-            in("ecx") 0xC000_0080u32,
-            out("eax") efer_low,
-            out("edx") efer_high,
-            options(nomem, nostack, preserves_flags)
-        );
-    }
-    let efer = ((efer_high as u64) << 32) | efer_low as u64;
-    efer & (1 << 11) != 0
-}
-
 #[inline]
 fn merge_parent_flags(entry: u64, flags: PageFlags) -> u64 {
     let mut updated = entry;
@@ -770,7 +712,8 @@ unsafe fn write_volatile<T>(ptr: *mut T, value: T) {
 
 #[inline]
 fn flush_tlb_page(address: u64) {
-    unsafe { core::arch::asm!("invlpg [{}]", in(reg) address, options(nostack, preserves_flags)); }
+    // SAFETY: The active x86_64 page-table mutation path owns this address and flushes locally.
+    unsafe { arch::invalidate_tlb_page(address); }
 }
 
 #[cfg(test)]
