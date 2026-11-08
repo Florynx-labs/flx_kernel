@@ -15,6 +15,8 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         source = (ROOT / "kernel/src/mm/paging.rs").read_text()
         self.assertIn("arch::current_address_space_root()", source)
         self.assertIn("arch::invalidate_tlb_page(address)", source)
+        self.assertIn("arch::activate_address_space(self.root_phys)", source)
+        self.assertIn("arch::nx_enabled()", source)
         self.assertNotIn("core::arch::asm!", source)
 
     def test_arch_facade_selects_target_implementation(self):
