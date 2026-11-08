@@ -17,5 +17,12 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn('cfg(target_arch = "aarch64")', source)
         self.assertIn("interface::CpuArchitecture", source)
 
+    def test_aarch64_spinlock_masks_only_irq_and_preserves_daif_state(self):
+        source = (ROOT / "kernel/src/arch/aarch64/mod.rs").read_text()
+        self.assertIn('asm!("msr daifset, #2"', source)
+        self.assertIn('asm!("msr daifclr, #2"', source)
+        self.assertNotIn('daifset, #0xf', source)
+        self.assertNotIn('daifclr, #0xf', source)
+
 if __name__ == "__main__":
     unittest.main()
