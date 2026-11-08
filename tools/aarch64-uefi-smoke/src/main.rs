@@ -55,6 +55,16 @@ fn serial_init() {
     }
 }
 
+fn serial_write_hex(label: &[u8], value: u64) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    serial_write(label);
+    for shift in (0..16).rev() {
+        let digit = ((value >> (shift * 4)) & 0xf) as usize;
+        serial_write(&[HEX[digit]]);
+    }
+    serial_write(b"\r\n");
+}
+
 fn serial_write(bytes: &[u8]) {
     for byte in bytes {
         unsafe {
@@ -82,7 +92,17 @@ pub extern "efiapi" fn efi_main(
     }
 
     arch::aarch64::exceptions::trigger_controlled_breakpoint();
-    if arch::aarch64::exceptions::controlled_exception_seen() {
+    let (esr, elr, far, unhandled_kind) =
+        arch::aarch64::exceptions::last_exception_diagnostics();
+    serial_write_hex(b"ESR_EL1=0x", esr);
+    serial_write_hex(b"ELR_EL1=0x", elr);
+    serial_write_hex(b"FAR_EL1=0x", far);
+    let expected_brk = ((esr >> 26) & 0x3f) == 0x3c && (esr & 0xffff) == 0x0f00;
+    if arch::aarch64::exceptions::controlled_exception_seen()
+        && expected_brk
+        && elr != 0
+        && unhandled_kind == u64::MAX
+    {
         serial_write(b"FLX AARCH64 EXCEPTION: PASS\r\n");
     } else {
         serial_write(b"FLX AARCH64 EXCEPTION: FAIL\r\n");
