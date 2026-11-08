@@ -8,6 +8,16 @@ use core::ffi::c_void;
 use core::panic::PanicInfo;
 use core::ptr::{read_volatile, write_volatile};
 
+// Compile the production AArch64 CPU contract and primitives into the firmware image.
+pub mod arch {
+    #[path = "../../../kernel/src/arch/interface.rs"]
+    pub mod interface;
+    #[path = "../../../kernel/src/arch/aarch64/mod.rs"]
+    pub mod aarch64;
+}
+
+use arch::interface::CpuArchitecture;
+
 const PL011_BASE: usize = 0x0900_0000;
 const UARTDR: usize = PL011_BASE;
 const UARTFR: usize = PL011_BASE + 0x18;
@@ -60,10 +70,7 @@ pub extern "efiapi" fn efi_main(
 ) -> usize {
     serial_init();
     serial_write(b"FLX AARCH64 UEFI BOOT: PASS\r\n");
-    loop {
-        // SAFETY: WFE is valid at the privileged exception level entered by UEFI.
-        unsafe { core::arch::asm!("wfe", options(nomem, nostack)); }
-    }
+    <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever()
 }
 
 #[panic_handler]
