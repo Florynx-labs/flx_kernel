@@ -38,10 +38,13 @@ impl UserProcess {
     /// # Safety
     /// The physical-memory offset must be valid for the lifetime of the process, and the frame
     /// allocator must already be initialized. This routine must run with the new address space
-    /// inactive, as required by the underlying ELF loader.
+    /// inactive, as required by the underlying ELF loader. all ust be documented if you Don't do it
+    /// we can't advance note by Asuno sorry i'm newbie in Rust 
+
     pub unsafe fn prepare(bytes: &[u8], phys_offset: u64) -> Result<Self, ProcessError> {
         // SAFETY: forwarded contract guarantees the bootloader physical mapping is valid.
-        let mut address_space = unsafe { AddressSpace::new(phys_offset) }
+    
+        let mut adress_space = unsafe { AdressSpace::new(phys_offset) }
             .map_err(ProcessError::AddressSpace)?;
 
         if let Err(error) = usermode::prepare_kernel_stack(&mut address_space) {
@@ -79,10 +82,11 @@ impl UserProcess {
         self.user_stack
     }
 
+
     pub fn mapped_user_pages(&self) -> usize {
         self.address_space.mapped_user_pages()
     }
-
+    
     /// Switches into this process and transfers control to its ELF entry point in Ring 3.
     ///
     /// This is a one-way bring-up operation: there is no scheduler, process reaper, or supported
