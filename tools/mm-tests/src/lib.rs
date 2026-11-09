@@ -1,6 +1,26 @@
 //! Host-side test harness for pure memory-management algorithms.
 //! Kernel source modules are included directly so tests exercise production code.
 
+// Hardware-only operations are intentionally unavailable in the host test harness.
+// The pure page-table helpers can be tested; invoking these methods must fail loudly.
+pub mod arch {
+    pub fn nx_enabled() -> bool {
+        panic!("hardware NX state is unavailable in host tests")
+    }
+
+    pub unsafe fn activate_address_space(_root_phys: u64) {
+        panic!("hardware address-space activation is unavailable in host tests")
+    }
+
+    pub fn current_address_space_root() -> u64 {
+        panic!("hardware address-space state is unavailable in host tests")
+    }
+
+    pub unsafe fn invalidate_tlb_page(_address: u64) {
+        panic!("hardware TLB invalidation is unavailable in host tests")
+    }
+}
+
 pub mod sync {
     use std::sync::{Mutex, MutexGuard};
 
@@ -27,3 +47,7 @@ pub mod heap;
 pub mod virtual_range;
 
 pub use mm::paging;
+
+// Exercise the production scheduler policy in the host-side unit-test harness.
+#[path = "../../../kernel/src/task/scheduler.rs"]
+pub mod scheduler;

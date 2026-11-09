@@ -255,20 +255,31 @@ fn handle_exception(frame: &mut InterruptFrame) {
 
 fn dump_frame(f: &InterruptFrame) {
     let name = EXCEPTION_NAMES[f.vector as usize];
-    crate::kerror!("EXCEPTION {} (vector {}), error code {:#x}", name, f.vector, f.error_code);
+    // CR2 is overwritten by any nested page fault. Capture it before logging, because the
+    // logger may touch a mapping that is missing in the newly activated address space.
+    let fault_address = if f.vector == 14 { Some(cpu::read_cr2()) } else { None };
+    crate::kerror!(
+        "EXCEPTION {} (vector {}), error={:#x}, CR2={:#018x}, RIP={:#018x}, CS={:#06x}, RSP={:#018x}, SS={:#06x}, RFLAGS={:#x}",
+        name,
+        f.vector,
+        f.error_code,
+        fault_address.unwrap_or(0),
+        f.rip,
+        f.cs,
+        f.rsp,
+        f.ss,
+        f.rflags
+    );
     if f.vector == 14 {
         let e = f.error_code;
         crate::kerror!(
-            "  fault address {:#018x} [{}{}{}{}]",
-            cpu::read_cr2(),
+            "  access [{}{}{}{}]",
             if e & 1 != 0 { "protection " } else { "not-present " },
             if e & 2 != 0 { "write " } else { "read " },
             if e & 4 != 0 { "user " } else { "kernel " },
             if e & 16 != 0 { "ifetch" } else { "" },
         );
     }
-    crate::kerror!("  RIP={:#018x} CS={:#06x} RFLAGS={:#x}", f.rip, f.cs, f.rflags);
-    crate::kerror!("  RSP={:#018x} SS={:#06x}", f.rsp, f.ss);
     crate::kerror!("  RAX={:#018x} RBX={:#018x} RCX={:#018x}", f.rax, f.rbx, f.rcx);
     crate::kerror!("  RDX={:#018x} RSI={:#018x} RDI={:#018x}", f.rdx, f.rsi, f.rdi);
     crate::kerror!("  RBP={:#018x} R8 ={:#018x} R9 ={:#018x}", f.rbp, f.r8, f.r9);

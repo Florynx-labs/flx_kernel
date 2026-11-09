@@ -86,3 +86,73 @@ pub fn halt_loop() -> ! {
         halt();
     }
 }
+
+
+/// Native x86_64 implementation of the architecture-neutral CPU contract.
+#[cfg(target_arch = "x86_64")]
+pub struct X86_64;
+
+#[cfg(target_arch = "x86_64")]
+
+impl crate::arch::interface::CpuArchitecture for X86_64 {
+    const NAME: &'static str = "x86_64";
+
+    fn disable_interrupts() { disable_interrupts(); }
+    fn enable_interrupts() { enable_interrupts(); }
+    fn interrupts_enabled() -> bool { interrupts_enabled() }
+
+    fn logical_cpu_id() -> u64 {
+        // CPUID leaf 1 EBX[31:24] reports the initial APIC ID on supported x86 CPUs.
+        // This is sufficient for the current single-package bring-up; topology discovery
+        // and x2APIC IDs will be added with the SMP/APIC milestone.
+        let result = unsafe { __cpuid(1) };
+        ((result.ebx >> 24) & 0xff) as u64
+    }
+
+    fn halt_forever() -> ! { halt_loop() }
+
+    fn nx_enabled() -> bool {
+        const CPUID_NX: u32 = 1 << 20;
+        // SAFETY: CPUID is available on x86_64 and these leaves are side-effect free.
+        let max = unsafe { __cpuid(0x8000_0000) }.eax;
+        if max < 0x8000_0001 { return false; }
+        let features = unsafe { __cpuid(0x8000_0001) };
+        if features.edx & CPUID_NX == 0 { return false; }
+        let low: u32;
+        let high: u32;
+        // SAFETY: EFER is readable at CPL0; kernel runs privileged.
+        unsafe {
+            core::arch::asm!("rdmsr", in("ecx") 0xC000_0080u32,
+                out("eax") low, out("edx") high, options(nomem, nostack, preserves_flags));
+        }
+        (((high as u64) << 32) | low as u64) & (1 << 11) != 0
+    }
+
+    fn current_address_space_root() -> u64 {
+        let root: u64;
+        // SAFETY: Reading CR3 is a privileged, side-effect-free register read.
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) root, options(nomem, nostack, preserves_flags)); }
+        root & 0x000f_ffff_ffff_f000
+    }
+
+    unsafe fn invalidate_tlb_page(address: u64) {
+        // SAFETY: The caller guarantees the active translation context and shootdown protocol.
+        unsafe { core::arch::asm!("invlpg [{}]", in(reg) address, options(nostack, preserves_flags)); }
+    }
+
+    unsafe fn activate_address_space(root_phys: u64) {
+        assert_eq!(root_phys & 0xfff, 0, "CR3 root must be 4 KiB aligned");
+        // SAFETY: upheld by the trait caller's contract.
+        unsafe { core::arch::asm!("mov cr3, {}", in(reg) root_phys, options(nostack, preserves_flags)); }
+    }
+
+    unsafe fn invalidate_tlb_all() {
+        // Reloading CR3 flushes non-global translations when PCID is not enabled.
+        // Global mappings are intentionally retained; use INVPCID when PCID support lands.
+        let root: u64;
+        unsafe {
+            core::arch::asm!("mov {}, cr3", out(reg) root, options(nomem, nostack, preserves_flags));
+            core::arch::asm!("mov cr3, {}", in(reg) root, options(nostack, preserves_flags));
+        }
+    }
+}
