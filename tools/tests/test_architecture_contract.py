@@ -43,10 +43,13 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         timer = (ROOT / "kernel/src/arch/aarch64/timer.rs").read_text()
         exceptions = (ROOT / "kernel/src/arch/aarch64/exceptions.rs").read_text()
         self.assertIn("GICR_WAKER", gic)
-        self.assertIn("GICR_CTLR_RWP", gic)
-        self.assertIn("GICD_CTLR_RWP", gic)
-        self.assertIn("wait_for_rwp(GICR_CTLR", gic)
-        self.assertIn("wait_for_rwp(GICD_CTLR", gic)
+        # QEMU's GICv3 model completes these writes synchronously.
+        # Use DSB + readback rather than polling RWP indefinitely.
+        self.assertIn("GICR_CTLR.RWP is RAZ/WI", gic)
+        self.assertIn("DistributorConfigurationFailed", gic)
+        self.assertIn("CpuInterfaceUnavailable", gic)
+        self.assertIn('"dsb sy"', gic)
+        self.assertNotIn("wait_for_rwp(", gic)
         self.assertIn("PpiConfigurationFailed", gic)
         self.assertIn("ICC_IAR1_EL1", gic)
         self.assertIn("ICC_EOIR1_EL1", gic)
