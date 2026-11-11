@@ -109,3 +109,13 @@ pub(crate) fn handle_interrupt(interrupt_id: u32) {
         }
     }
 }
+
+/// Returns CNTFRQ_EL0, CNTVCT_EL0 and CNTP_CTL_EL0 for early-boot diagnostics.
+pub fn hardware_diagnostics() -> [u64; 3] {
+    let mut control = 0u64;
+    // SAFETY: these architectural timer registers are readable at EL1.
+    unsafe {
+        core::arch::asm!("mrs {value}, CNTP_CTL_EL0", value = out(reg) control, options(nomem, nostack, preserves_flags));
+    }
+    [read_counter_frequency(), counter(), control]
+}
