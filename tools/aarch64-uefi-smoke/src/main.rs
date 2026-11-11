@@ -115,15 +115,17 @@ pub extern "efiapi" fn efi_main(
         <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
     }
     serial_write(b"FLX AARCH64 TIMER: READY\r\n");
-    // Poll the architectural counter rather than sleeping so a missing IRQ is diagnosable.
-    let deadline = arch::aarch64::timer::counter()
-        .saturating_add(arch::aarch64::timer::frequency().saturating_mul(2));
-    while arch::aarch64::timer::ticks() < 3
-        && arch::aarch64::timer::counter() < deadline
-    {
+    // Use an instruction watchdog, not CNTVCT, so a stopped or inaccessible
+    // architectural counter cannot trap the smoke test in an unbounded wait.
+    let mut watchdog = 50_000_000u64;
+    while arch::aarch64::timer::ticks() < 3 && watchdog != 0 {
+        watchdog -= 1;
         core::hint::spin_loop();
     }
     let ticks = arch::aarch64::timer::ticks();
+    serial_write_hex(b"TIMER_LAST_IRQ=0x", arch::aarch64::timer::last_interrupt_id());
+    serial_write_hex(b"TIMER_UNEXPECTED_IRQS=0x", arch::aarch64::timer::unexpected_interrupts());
+    serial_write_hex(b"TIMER_WATCHDOG_REMAINING=0x", watchdog);
     serial_write_hex(b"TIMER_TICKS=0x", ticks);
     if ticks < 3 {
         let gic = arch::aarch64::gic::timer_diagnostics();
