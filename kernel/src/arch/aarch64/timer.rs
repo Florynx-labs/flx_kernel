@@ -7,6 +7,8 @@ use super::gic;
 static TICKS: AtomicU64 = AtomicU64::new(0);
 static RELOAD_TICKS: AtomicU64 = AtomicU64::new(0);
 static COUNTER_FREQUENCY: AtomicU64 = AtomicU64::new(0);
+static LAST_INTERRUPT_ID: AtomicU64 = AtomicU64::new(u64::MAX);
+static UNEXPECTED_INTERRUPTS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimerError {
@@ -101,14 +103,20 @@ pub fn frequency() -> u64 {
 }
 
 pub(crate) fn handle_interrupt(interrupt_id: u32) {
+    LAST_INTERRUPT_ID.store(interrupt_id as u64, Ordering::Release);
     if interrupt_id == gic::physical_timer_ppi() {
         TICKS.fetch_add(1, Ordering::AcqRel);
         let reload = RELOAD_TICKS.load(Ordering::Acquire);
         if reload != 0 {
             program_next_tick(reload);
         }
+    } else {
+        UNEXPECTED_INTERRUPTS.fetch_add(1, Ordering::AcqRel);
     }
 }
+
+pub fn last_interrupt_id() -> u64 { LAST_INTERRUPT_ID.load(Ordering::Acquire) }
+pub fn unexpected_interrupts() -> u64 { UNEXPECTED_INTERRUPTS.load(Ordering::Acquire) }
 
 /// Returns CNTFRQ_EL0, CNTVCT_EL0 and CNTP_CTL_EL0 for early-boot diagnostics.
 pub fn hardware_diagnostics() -> [u64; 3] {
