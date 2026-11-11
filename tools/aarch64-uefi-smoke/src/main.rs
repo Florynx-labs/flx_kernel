@@ -125,6 +125,21 @@ pub extern "efiapi" fn efi_main(
     }
     let ticks = arch::aarch64::timer::ticks();
     serial_write_hex(b"TIMER_TICKS=0x", ticks);
+    if ticks < 3 {
+        let gic = arch::aarch64::gic::timer_diagnostics();
+        let timer = arch::aarch64::timer::hardware_diagnostics();
+        serial_write_hex(b"GICD_CTLR=0x", gic[0]);
+        serial_write_hex(b"GICR_CTLR=0x", gic[1]);
+        serial_write_hex(b"GICR_WAKER=0x", gic[2]);
+        serial_write_hex(b"GICR_IGROUPR0=0x", gic[3]);
+        serial_write_hex(b"GICR_ISENABLER0=0x", gic[4]);
+        serial_write_hex(b"GICR_ISPENDR0=0x", gic[5]);
+        serial_write_hex(b"ICC_SRE_EL1=0x", gic[6]);
+        serial_write_hex(b"ICC_PMR_IGRPEN1=0x", gic[7]);
+        serial_write_hex(b"CNTFRQ_EL0=0x", timer[0]);
+        serial_write_hex(b"CNTVCT_EL0=0x", timer[1]);
+        serial_write_hex(b"CNTP_CTL_EL0=0x", timer[2]);
+    }
     arch::aarch64::timer::stop();
     if ticks >= 3 {
         serial_write(b"FLX AARCH64 TIMER: PASS\r\n");
