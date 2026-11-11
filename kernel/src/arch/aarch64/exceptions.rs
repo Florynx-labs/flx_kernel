@@ -255,10 +255,9 @@ extern "C" fn __flx_aarch64_irq_dispatch() {
     super::gic::end_group1(raw_iar);
 
     if interrupt_id != super::gic::physical_timer_ppi() {
+        // Keep early bring-up diagnosable: record unexpected IRQs, EOI them, and
+        // return instead of wedging the CPU before the serial watchdog can report state.
         LAST_UNHANDLED_KIND.store(interrupt_id as u64, Ordering::Relaxed);
-        loop {
-            unsafe { core::arch::asm!("wfe", options(nomem, nostack)); }
-        }
     }
 }
 
