@@ -15,6 +15,7 @@ const GICR_CTLR_RWP: u32 = 1 << 3;
 const GICR_WAKER: usize = GICR_BASE + 0x14;
 const GICR_IGROUPR0: usize = GICR_BASE + 0x10080;
 const GICR_ISENABLER0: usize = GICR_BASE + 0x10100;
+const GICR_ISPENDR0: usize = GICR_BASE + 0x10200;
 const GICR_IPRIORITYR: usize = GICR_BASE + 0x10400;
 const PHYSICAL_TIMER_PPI: u32 = 30;
 
@@ -157,4 +158,29 @@ pub fn interrupt_id(raw_iar: u32) -> u32 {
 
 pub const fn physical_timer_ppi() -> u32 {
     PHYSICAL_TIMER_PPI
+}
+
+/// Captures the boot CPU GICv3 state relevant to physical timer delivery.
+/// Values are returned in a stable order for early-boot serial diagnostics.
+pub fn timer_diagnostics() -> [u64; 8] {
+    let mut group_enable = 0u64;
+    let mut sre = 0u64;
+    let mut pmr = 0u64;
+    let mut group1_enable = 0u64;
+    unsafe {
+        core::arch::asm!("mrs {value}, ICC_SRE_EL1", value = out(reg) sre, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {value}, ICC_PMR_EL1", value = out(reg) pmr, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {value}, ICC_IGRPEN1_EL1", value = out(reg) group1_enable, options(nomem, nostack, preserves_flags));
+        group_enable = read32(GICR_IGROUPR0) as u64;
+    }
+    [
+        unsafe { read32(GICD_CTLR) } as u64,
+        unsafe { read32(GICR_CTLR) } as u64,
+        unsafe { read32(GICR_WAKER) } as u64,
+        group_enable,
+        unsafe { read32(GICR_ISENABLER0) } as u64,
+        unsafe { read32(GICR_ISPENDR0) } as u64,
+        sre,
+        (pmr << 32) | group1_enable,
+    ]
 }
