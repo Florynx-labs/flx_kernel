@@ -117,7 +117,7 @@ pub extern "efiapi" fn efi_main(
     serial_write(b"FLX AARCH64 TIMER: READY\r\n");
     // Use an instruction watchdog, not CNTVCT, so a stopped or inaccessible
     // architectural counter cannot trap the smoke test in an unbounded wait.
-    let mut watchdog = 50_000_000u64;
+    let mut watchdog = 10_000_000u64;
     while arch::aarch64::timer::ticks() < 3 && watchdog != 0 {
         watchdog -= 1;
         core::hint::spin_loop();
