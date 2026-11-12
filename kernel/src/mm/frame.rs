@@ -5,8 +5,6 @@
 //! usable region large enough to hold it and accessed through the bootloader's
 //! physical-memory mapping. Frames below 1 MiB are never handed out.
 
-use bootloader_api::info::{MemoryRegion, MemoryRegionKind};
-
 use crate::sync::Spinlock;
 
 /// Size of a physical frame in bytes.
@@ -27,6 +25,16 @@ pub enum FrameError {
     DoubleFree,
     /// The frame is reserved memory and was never handed out by this allocator.
     NotAllocated,
+}
+
+/// Minimal memory-map contract consumed by the physical frame allocator.
+///
+/// Boot protocols implement this trait in their adapter layer so the allocator does not
+/// depend on a particular firmware or boot descriptor layout.
+pub trait FrameMemoryRegion {
+    fn start(&self) -> u64;
+    fn end(&self) -> u64;
+    fn is_usable(&self) -> bool;
 }
 
 /// Snapshot of allocator statistics.
@@ -54,16 +62,16 @@ const fn align_down(value: u64, align: u64) -> u64 {
 }
 
 impl BitmapFrameAllocator {
-    /// Builds the allocator from the bootloader memory map.
+    /// Builds the allocator from an architecture-neutral memory map.
     ///
     /// # Safety
     /// `phys_offset` must be the virtual offset at which *all* physical memory in `regions`
-    /// is linearly mapped and writable, and the `Usable` regions must really be unused.
-    unsafe fn new(regions: &[MemoryRegion], phys_offset: u64) -> Result<Self, FrameError> {
+    /// is linearly mapped and writable, and regions marked usable must really be unused.
+    unsafe fn new<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64) -> Result<Self, FrameError> {
         let max_addr = regions
             .iter()
-            .filter(|r| r.kind == MemoryRegionKind::Usable)
-            .map(|r| r.end)
+            .filter(|r| r.is_usable())
+            .map(|r| r.end())
             .max()
             .ok_or(FrameError::NoSpaceForBitmap)?;
 
@@ -79,10 +87,10 @@ impl BitmapFrameAllocator {
         // Find a usable region (above MIN_PHYS_ADDR) that can host both bitmaps.
         let bitmap_phys = regions
             .iter()
-            .filter(|r| r.kind == MemoryRegionKind::Usable)
+            .filter(|r| r.is_usable())
             .find_map(|r| {
-                let start = align_up(r.start.max(MIN_PHYS_ADDR), FRAME_SIZE);
-                let end = align_down(r.end, FRAME_SIZE);
+                let start = align_up(r.start().max(MIN_PHYS_ADDR), FRAME_SIZE);
+                let end = align_down(r.end(), FRAME_SIZE);
                 (end > start && end - start >= metadata_frames * FRAME_SIZE).then_some(start)
             })
             .ok_or(FrameError::NoSpaceForBitmap)?;
@@ -105,9 +113,9 @@ impl BitmapFrameAllocator {
         };
 
         // Free every frame of every usable region (>= MIN_PHYS_ADDR).
-        for region in regions.iter().filter(|r| r.kind == MemoryRegionKind::Usable) {
-            let start = align_up(region.start.max(MIN_PHYS_ADDR), FRAME_SIZE);
-            let end = align_down(region.end, FRAME_SIZE);
+        for region in regions.iter().filter(|r| r.is_usable()) {
+            let start = align_up(region.start().max(MIN_PHYS_ADDR), FRAME_SIZE);
+            let end = align_down(region.end(), FRAME_SIZE);
             let mut addr = start;
             while addr < end {
                 alloc.clear_bit((addr / FRAME_SIZE) as usize);
@@ -210,8 +218,8 @@ static ALLOCATOR: Spinlock<Option<BitmapFrameAllocator>> = Spinlock::new(None);
 ///
 /// # Safety
 /// See [`BitmapFrameAllocator::new`]: `phys_offset` must map all physical memory and the
-/// `Usable` regions in `regions` must not be in use by anything else.
-pub unsafe fn init(regions: &[MemoryRegion], phys_offset: u64) -> Result<FrameStats, FrameError> {
+/// regions marked usable in `regions` must not be in use by anything else.
+pub unsafe fn init<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64) -> Result<FrameStats, FrameError> {
     let allocator = BitmapFrameAllocator::new(regions, phys_offset)?;
     let stats = FrameStats {
         total_frames: allocator.total_frames,

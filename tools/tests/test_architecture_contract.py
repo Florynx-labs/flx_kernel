@@ -19,6 +19,14 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("arch::nx_enabled()", source)
         self.assertNotIn("core::arch::asm!", source)
 
+    def test_frame_allocator_uses_boot_protocol_neutral_memory_contract(self):
+        frame = (ROOT / "kernel/src/mm/frame.rs").read_text()
+        boot = (ROOT / "kernel/src/boot/info.rs").read_text()
+        self.assertIn("pub trait FrameMemoryRegion", frame)
+        self.assertIn("R: FrameMemoryRegion", frame)
+        self.assertNotIn("use bootloader_api", frame)
+        self.assertIn("impl FrameMemoryRegion for MemoryRegion", boot)
+
     def test_arch_facade_selects_target_implementation(self):
         source = (ROOT / "kernel/src/arch/mod.rs").read_text()
         self.assertIn('cfg(target_arch = "x86_64")', source)
