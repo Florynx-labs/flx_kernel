@@ -128,11 +128,13 @@ pub fn last_interrupt_id() -> u64 { LAST_INTERRUPT_ID.load(Ordering::Acquire) }
 pub fn unexpected_interrupts() -> u64 { UNEXPECTED_INTERRUPTS.load(Ordering::Acquire) }
 
 /// Returns CNTFRQ_EL0, CNTVCT_EL0 and CNTP_CTL_EL0 for early-boot diagnostics.
-pub fn hardware_diagnostics() -> [u64; 3] {
-    let mut control = 0u64;
+pub fn hardware_diagnostics() -> [u64; 4] {
+    let mut physical_control = 0u64;
+    let mut virtual_control = 0u64;
     // SAFETY: these architectural timer registers are readable at EL1.
     unsafe {
-        core::arch::asm!("mrs {value}, CNTP_CTL_EL0", value = out(reg) control, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {value}, CNTP_CTL_EL0", value = out(reg) physical_control, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {value}, CNTV_CTL_EL0", value = out(reg) virtual_control, options(nomem, nostack, preserves_flags));
     }
-    [read_counter_frequency(), counter(), control]
+    [read_counter_frequency(), counter(), physical_control, virtual_control]
 }
