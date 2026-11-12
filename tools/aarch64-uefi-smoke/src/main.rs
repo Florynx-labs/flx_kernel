@@ -129,6 +129,7 @@ pub extern "efiapi" fn efi_main(
     serial_write_hex(b"PRE_CNTFRQ_EL0=0x", timer_before_wait[0]);
     serial_write_hex(b"PRE_CNTVCT_EL0=0x", timer_before_wait[1]);
     serial_write_hex(b"PRE_CNTP_CTL_EL0=0x", timer_before_wait[2]);
+    serial_write_hex(b"PRE_CNTV_CTL_EL0=0x", timer_before_wait[3]);
     // CNTVCT_EL0 was verified readable and advancing in the pre-wait snapshot.
     // Bound the smoke test to one architectural second, not an instruction count:
     // QEMU TCG speed varies and a short spin loop can finish before a 10 ms tick.
@@ -159,6 +160,7 @@ pub extern "efiapi" fn efi_main(
         serial_write_hex(b"CNTFRQ_EL0=0x", timer[0]);
         serial_write_hex(b"CNTVCT_EL0=0x", timer[1]);
         serial_write_hex(b"CNTP_CTL_EL0=0x", timer[2]);
+        serial_write_hex(b"CNTV_CTL_EL0=0x", timer[3]);
     }
     arch::aarch64::timer::stop();
     if ticks >= 3 {
