@@ -136,9 +136,12 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // 9. Physical memory: frame allocator + self-test.
     match phys_offset {
         Some(offset) => {
-            // SAFETY: The bootloader maps all physical memory at `offset` (Mapping::Dynamic)
-            // and reports only truly free ranges as `Usable`.
-            match unsafe { mm::frame::init(&boot_info.memory_regions, offset) } {
+            // SAFETY: Mapping::Dynamic provides the permanent writable linear map used by
+            // this UEFI boot path. The adapter keeps that bootloader detail out of the allocator.
+            let mapper = unsafe { boot::info::LinearPhysicalMemoryMapper::new(offset) };
+            // SAFETY: the mapper covers the bootloader's physical map, and Usable regions
+            // are the only ranges eligible for allocator metadata and frame allocation.
+            match unsafe { mm::frame::init(&boot_info.memory_regions, &mapper) } {
                 Ok(stats) => {
                     kok!(
                         "Frame allocator ({} frames tracked, {} MB free)",

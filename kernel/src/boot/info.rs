@@ -1,14 +1,46 @@
 //! Boot information analysis and memory map parsing.
 
 use bootloader_api::info::{BootInfo, MemoryRegion, MemoryRegionKind};
+use core::ptr::NonNull;
 
-use crate::mm::frame::FrameMemoryRegion;
+use crate::mm::{frame::FrameMemoryRegion, mapper::PhysicalMemoryMapper};
 
 /// Adapt the bootloader descriptor to the architecture-neutral frame allocator contract.
 impl FrameMemoryRegion for MemoryRegion {
     fn start(&self) -> u64 { self.start }
     fn end(&self) -> u64 { self.end }
     fn is_usable(&self) -> bool { self.kind == MemoryRegionKind::Usable }
+}
+
+/// Adapter for the UEFI bootloader's dynamic linear physical-memory mapping.
+///
+/// Keep this boot-protocol detail outside the architecture-neutral memory manager.
+pub struct LinearPhysicalMemoryMapper {
+    virtual_offset: u64,
+}
+
+impl LinearPhysicalMemoryMapper {
+    /// Creates an adapter for a bootloader-provided linear physical map.
+    ///
+    /// # Safety
+    /// `virtual_offset` must identify a writable, contiguous mapping of every physical
+    /// RAM range the frame allocator may request, and it must remain active permanently.
+    pub unsafe fn new(virtual_offset: u64) -> Self {
+        Self { virtual_offset }
+    }
+}
+
+// SAFETY: construction is unsafe and requires the bootloader mapping contract documented
+// above. The implementation performs checked address arithmetic for every requested range.
+unsafe impl PhysicalMemoryMapper for LinearPhysicalMemoryMapper {
+    unsafe fn map_physical(&self, physical_address: u64, size: usize) -> Option<NonNull<u8>> {
+        let virtual_address = self.virtual_offset.checked_add(physical_address)?;
+        if size > 0 {
+            let last_byte = u64::try_from(size - 1).ok()?;
+            virtual_address.checked_add(last_byte)?;
+        }
+        NonNull::new(virtual_address as *mut u8)
+    }
 }
 
 /// High-level summary of system physical memory reported by UEFI/bootloader.

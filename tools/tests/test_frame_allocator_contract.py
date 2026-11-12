@@ -64,12 +64,20 @@ class PhysicalFrameAllocatorContractTests(unittest.TestCase):
         self.assertGreater(count_update, used_clear)
 
     def test_metadata_reserves_space_for_both_bitmaps(self):
-        body = function_body(SOURCE, "unsafe fn new<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64)")
+        body = function_body(SOURCE, "unsafe fn new<R: FrameMemoryRegion, M: PhysicalMemoryMapper>(")
         self.assertRegex(body, r"checked_mul\(16\)")
         self.assertIn("allocated_ptr", body)
+        self.assertIn("mapper.map_physical(bitmap_phys, bitmap_bytes)", body)
+        self.assertIn("mapper.map_physical(allocated_phys, bitmap_bytes)", body)
         self.assertIn("metadata_frames", body)
         self.assertIn("alloc.set_bit(frame)", body)
         self.assertIn("alloc.free_frames -= 1", body)
+
+
+    def test_global_init_receives_a_mapper_not_a_virtual_offset(self):
+        body = function_body(SOURCE, "pub unsafe fn init<R: FrameMemoryRegion, M: PhysicalMemoryMapper>(")
+        self.assertIn("mapper: &M", SOURCE)
+        self.assertIn("BitmapFrameAllocator::new(regions, mapper)", body)
 
 
 if __name__ == "__main__":

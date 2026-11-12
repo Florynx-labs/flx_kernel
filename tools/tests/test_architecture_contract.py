@@ -27,6 +27,18 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertNotIn("use bootloader_api", frame)
         self.assertIn("impl FrameMemoryRegion for MemoryRegion", boot)
 
+    def test_frame_allocator_uses_injected_physical_mapper(self):
+        frame = (ROOT / "kernel/src/mm/frame.rs").read_text()
+        mapper = (ROOT / "kernel/src/mm/mapper.rs").read_text()
+        boot = (ROOT / "kernel/src/boot/info.rs").read_text()
+        main = (ROOT / "kernel/src/main.rs").read_text()
+        self.assertIn("pub unsafe trait PhysicalMemoryMapper", mapper)
+        self.assertIn("use crate::mm::mapper::PhysicalMemoryMapper", frame)
+        self.assertIn("mapper.map_physical(bitmap_phys, bitmap_bytes)", frame)
+        self.assertIn("pub struct LinearPhysicalMemoryMapper", boot)
+        self.assertIn("unsafe impl PhysicalMemoryMapper for LinearPhysicalMemoryMapper", boot)
+        self.assertIn("frame::init(&boot_info.memory_regions, &mapper)", main)
+
     def test_arch_facade_selects_target_implementation(self):
         source = (ROOT / "kernel/src/arch/mod.rs").read_text()
         self.assertIn('cfg(target_arch = "x86_64")', source)
