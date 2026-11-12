@@ -43,6 +43,9 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         timer = (ROOT / "kernel/src/arch/aarch64/timer.rs").read_text()
         exceptions = (ROOT / "kernel/src/arch/aarch64/exceptions.rs").read_text()
         self.assertIn("GICR_WAKER", gic)
+        self.assertIn("GICR_ICENABLER0", gic)
+        self.assertIn("GICR_ICPENDR0", gic)
+        self.assertIn("VIRTUAL_TIMER_PPI: u32 = 27", gic)
         # QEMU's GICv3 model completes these writes synchronously.
         # Use DSB + readback rather than polling RWP indefinitely.
         self.assertIn("GICR_CTLR.RWP is RAZ/WI", gic)
@@ -54,6 +57,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("ICC_IAR1_EL1", gic)
         self.assertIn("ICC_EOIR1_EL1", gic)
         self.assertIn("CNTP_TVAL_EL0", timer)
+        self.assertIn("CNTV_CTL_EL0", timer)
         self.assertIn("CNTFRQ_EL0", timer)
         self.assertIn("__flx_aarch64_irq_dispatch", exceptions)
         self.assertIn("super::timer::handle_interrupt(interrupt_id)", exceptions)
