@@ -12,8 +12,11 @@ const GICD_CTLR: usize = GICD_BASE;
 const GICR_CTLR: usize = GICR_BASE;
 const GICR_WAKER: usize = GICR_BASE + 0x14;
 const GICR_IGROUPR0: usize = GICR_BASE + 0x10080;
+const GICR_ICENABLER0: usize = GICR_BASE + 0x10180;
 const GICR_ISENABLER0: usize = GICR_BASE + 0x10100;
+const GICR_ICPENDR0: usize = GICR_BASE + 0x10280;
 const GICR_ISPENDR0: usize = GICR_BASE + 0x10200;
+const VIRTUAL_TIMER_PPI: u32 = 27;
 const GICR_IPRIORITYR: usize = GICR_BASE + 0x10400;
 const PHYSICAL_TIMER_PPI: u32 = 30;
 
@@ -61,8 +64,13 @@ pub unsafe fn init_physical_timer_ppi() -> Result<(), GicError> {
     }
 
     let ppi_mask = 1u32 << PHYSICAL_TIMER_PPI;
+    let inherited_virtual_timer_mask = 1u32 << VIRTUAL_TIMER_PPI;
     unsafe {
-        // GICR writes are posted. Keep IRQ masked until the redistributor reports RWP=0.
+        // UEFI may leave its virtual timer PPI enabled and pending. This kernel
+        // owns the EL1 timer from this point, so retire that inherited source
+        // before unmasking IRQ and use the physical timer PPI (INTID 30) only.
+        write32(GICR_ICENABLER0, inherited_virtual_timer_mask);
+        write32(GICR_ICPENDR0, inherited_virtual_timer_mask);
         // Configure the physical timer as Group 1 Non-secure, then enable its PPI.
         write32(GICR_IGROUPR0, read32(GICR_IGROUPR0) | ppi_mask);
         core::ptr::write_volatile((GICR_IPRIORITYR + PHYSICAL_TIMER_PPI as usize) as *mut u8, 0x80);
@@ -77,7 +85,15 @@ pub unsafe fn init_physical_timer_ppi() -> Result<(), GicError> {
     // be mistaken for a successfully configured interrupt source.
     let group = unsafe { read32(GICR_IGROUPR0) };
     let enabled = unsafe { read32(GICR_ISENABLER0) };
-    if group & ppi_mask == 0 || enabled & ppi_mask == 0 {
+    let inherited_virtual_timer_enabled =
+        unsafe { read32(GICR_ISENABLER0) } & inherited_virtual_timer_mask != 0;
+    let inherited_virtual_timer_pending =
+        unsafe { read32(GICR_ISPENDR0) } & inherited_virtual_timer_mask != 0;
+    if group & ppi_mask == 0
+        || enabled & ppi_mask == 0
+        || inherited_virtual_timer_enabled
+        || inherited_virtual_timer_pending
+    {
         return Err(GicError::PpiConfigurationFailed);
     }
 
