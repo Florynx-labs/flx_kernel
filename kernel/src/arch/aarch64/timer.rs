@@ -14,7 +14,7 @@ static UNEXPECTED_INTERRUPTS: AtomicU64 = AtomicU64::new(0);
 pub enum TimerError {
     WrongExceptionLevel(u8),
     InvalidPeriod,
-    RedistributorWakeTimeout,
+    Gic(gic::GicError),
 }
 
 #[inline]
@@ -78,7 +78,7 @@ pub unsafe fn init_periodic(period_ms: u64) -> Result<(), TimerError> {
     // Keep the timer disabled while the GIC PPI and CPU interface are configured.
     unsafe { core::arch::asm!("msr CNTP_CTL_EL0, xzr", options(nomem, nostack, preserves_flags)); }
     unsafe {
-        gic::init_physical_timer_ppi().map_err(|_| TimerError::RedistributorWakeTimeout)?;
+        gic::init_physical_timer_ppi().map_err(TimerError::Gic)?;
     }
     program_next_tick(reload);
 
