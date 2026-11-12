@@ -129,17 +129,21 @@ pub extern "efiapi" fn efi_main(
     serial_write_hex(b"PRE_CNTFRQ_EL0=0x", timer_before_wait[0]);
     serial_write_hex(b"PRE_CNTVCT_EL0=0x", timer_before_wait[1]);
     serial_write_hex(b"PRE_CNTP_CTL_EL0=0x", timer_before_wait[2]);
-    // Use an instruction watchdog, not CNTVCT, so a stopped or inaccessible
-    // architectural counter cannot trap the smoke test in an unbounded wait.
-    let mut watchdog = 10_000_000u64;
-    while arch::aarch64::timer::ticks() < 3 && watchdog != 0 {
-        watchdog -= 1;
+    // CNTVCT_EL0 was verified readable and advancing in the pre-wait snapshot.
+    // Bound the smoke test to one architectural second, not an instruction count:
+    // QEMU TCG speed varies and a short spin loop can finish before a 10 ms tick.
+    let wait_start = arch::aarch64::timer::counter();
+    let wait_budget = arch::aarch64::timer::frequency();
+    while arch::aarch64::timer::ticks() < 3
+        && arch::aarch64::timer::counter().wrapping_sub(wait_start) < wait_budget
+    {
         core::hint::spin_loop();
     }
     let ticks = arch::aarch64::timer::ticks();
+    let elapsed = arch::aarch64::timer::counter().wrapping_sub(wait_start);
     serial_write_hex(b"TIMER_LAST_IRQ=0x", arch::aarch64::timer::last_interrupt_id());
     serial_write_hex(b"TIMER_UNEXPECTED_IRQS=0x", arch::aarch64::timer::unexpected_interrupts());
-    serial_write_hex(b"TIMER_WATCHDOG_REMAINING=0x", watchdog);
+    serial_write_hex(b"TIMER_ELAPSED_COUNTER_TICKS=0x", elapsed);
     serial_write_hex(b"TIMER_TICKS=0x", ticks);
     if ticks < 3 {
         let gic = arch::aarch64::gic::timer_diagnostics();
