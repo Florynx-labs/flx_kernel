@@ -88,9 +88,11 @@ jobs:
       - name: Boot AArch64 UEFI image under QEMU
         run: bash tools/ci/check_aarch64_uefi.sh 30
 
-      - name: Upload AArch64 serial log
+      - name: Upload AArch64 serial and QEMU diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aarch64-uefi-serial-log
-          path: aarch64-uefi-serial.log
+          name: aarch64-uefi-diagnostics
+          path: |
+            aarch64-uefi-serial.log
+            aarch64-uefi-qemu-debug.log
