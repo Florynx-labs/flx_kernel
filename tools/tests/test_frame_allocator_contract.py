@@ -64,7 +64,7 @@ class PhysicalFrameAllocatorContractTests(unittest.TestCase):
         self.assertGreater(count_update, used_clear)
 
     def test_metadata_reserves_space_for_both_bitmaps(self):
-        body = function_body(SOURCE, "unsafe fn new(regions: &[MemoryRegion], phys_offset: u64)")
+        body = function_body(SOURCE, "unsafe fn new<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64)")
         self.assertRegex(body, r"checked_mul\(16\)")
         self.assertIn("allocated_ptr", body)
         self.assertIn("metadata_frames", body)
