@@ -330,7 +330,43 @@ pub fn self_test() -> Result<(), &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BitmapFrameAllocator, FrameError, FRAME_SIZE, MIN_PHYS_ADDR};
+    use super::{
+        validate_usable_regions, BitmapFrameAllocator, FrameError, FrameMemoryRegion, FRAME_SIZE,
+        MIN_PHYS_ADDR,
+    };
+
+    #[derive(Clone, Copy)]
+    struct Region { start: u64, end: u64, usable: bool }
+
+    impl FrameMemoryRegion for Region {
+        fn start(&self) -> u64 { self.start }
+        fn end(&self) -> u64 { self.end }
+        fn is_usable(&self) -> bool { self.usable }
+    }
+
+    #[test]
+    fn rejects_reversed_usable_memory_region() {
+        let regions = [Region { start: 0x20_0000, end: 0x10_0000, usable: true }];
+        assert_eq!(validate_usable_regions(&regions), Err(FrameError::InvalidMemoryMap));
+    }
+
+    #[test]
+    fn rejects_overlapping_usable_memory_regions() {
+        let regions = [
+            Region { start: 0x10_0000, end: 0x40_0000, usable: true },
+            Region { start: 0x30_0000, end: 0x50_0000, usable: true },
+        ];
+        assert_eq!(validate_usable_regions(&regions), Err(FrameError::InvalidMemoryMap));
+    }
+
+    #[test]
+    fn accepts_adjacent_usable_memory_regions() {
+        let regions = [
+            Region { start: 0x10_0000, end: 0x20_0000, usable: true },
+            Region { start: 0x20_0000, end: 0x30_0000, usable: true },
+        ];
+        assert_eq!(validate_usable_regions(&regions), Ok(()));
+    }
 
     fn allocator_with_free_frames(frames: &[usize]) -> BitmapFrameAllocator {
         let total_frames = 512;
