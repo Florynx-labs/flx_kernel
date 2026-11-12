@@ -43,17 +43,33 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         timer = (ROOT / "kernel/src/arch/aarch64/timer.rs").read_text()
         exceptions = (ROOT / "kernel/src/arch/aarch64/exceptions.rs").read_text()
         self.assertIn("GICR_WAKER", gic)
-        self.assertIn("GICR_CTLR_RWP", gic)
-        self.assertIn("GICD_CTLR_RWP", gic)
-        self.assertIn("wait_for_rwp(GICR_CTLR", gic)
-        self.assertIn("wait_for_rwp(GICD_CTLR", gic)
+        self.assertIn("GICR_ICENABLER0", gic)
+        self.assertIn("GICR_ICPENDR0", gic)
+        self.assertIn("VIRTUAL_TIMER_PPI: u32 = 27", gic)
+        # QEMU's GICv3 model completes these writes synchronously.
+        # Use DSB + readback rather than polling RWP indefinitely.
+        self.assertIn("GICR_CTLR.RWP is RAZ/WI", gic)
+        self.assertIn("DistributorConfigurationFailed", gic)
+        self.assertIn("CpuInterfaceUnavailable", gic)
+        self.assertIn('"dsb sy"', gic)
+        self.assertNotIn("wait_for_rwp(", gic)
         self.assertIn("PpiConfigurationFailed", gic)
         self.assertIn("ICC_IAR1_EL1", gic)
         self.assertIn("ICC_EOIR1_EL1", gic)
         self.assertIn("CNTP_TVAL_EL0", timer)
+        self.assertIn("CNTV_CTL_EL0", timer)
         self.assertIn("CNTFRQ_EL0", timer)
         self.assertIn("__flx_aarch64_irq_dispatch", exceptions)
         self.assertIn("super::timer::handle_interrupt(interrupt_id)", exceptions)
+        self.assertIn("mask_irq_on_exception_return()", exceptions)
+        self.assertIn("msr SPSR_EL1", exceptions)
+
+
+    def test_aarch64_timer_smoke_uses_counter_bounded_wait(self):
+        source = (ROOT / "tools/aarch64-uefi-smoke/src/main.rs").read_text()
+        self.assertIn("let wait_budget = arch::aarch64::timer::frequency()", source)
+        self.assertIn("counter().wrapping_sub(wait_start) < wait_budget", source)
+        self.assertNotIn("10_000_000u64", source)
 
     def test_aarch64_spinlock_masks_only_irq_and_preserves_daif_state(self):
         source = (ROOT / "kernel/src/arch/aarch64/mod.rs").read_text()

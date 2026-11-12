@@ -115,16 +115,53 @@ pub extern "efiapi" fn efi_main(
         <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
     }
     serial_write(b"FLX AARCH64 TIMER: READY\r\n");
-    // Poll the architectural counter rather than sleeping so a missing IRQ is diagnosable.
-    let deadline = arch::aarch64::timer::counter()
-        .saturating_add(arch::aarch64::timer::frequency().saturating_mul(2));
+    // Capture the programmed hardware state before unmasked IRQ delivery can
+    // monopolize the CPU; this distinguishes timer programming from IRQ dispatch.
+    let gic_before_wait = arch::aarch64::gic::timer_diagnostics();
+    let timer_before_wait = arch::aarch64::timer::hardware_diagnostics();
+    serial_write_hex(b"PRE_GICD_CTLR=0x", gic_before_wait[0]);
+    serial_write_hex(b"PRE_GICR_WAKER=0x", gic_before_wait[2]);
+    serial_write_hex(b"PRE_GICR_IGROUPR0=0x", gic_before_wait[3]);
+    serial_write_hex(b"PRE_GICR_ISENABLER0=0x", gic_before_wait[4]);
+    serial_write_hex(b"PRE_GICR_ISPENDR0=0x", gic_before_wait[5]);
+    serial_write_hex(b"PRE_ICC_SRE_EL1=0x", gic_before_wait[6]);
+    serial_write_hex(b"PRE_ICC_PMR_IGRPEN1=0x", gic_before_wait[7]);
+    serial_write_hex(b"PRE_CNTFRQ_EL0=0x", timer_before_wait[0]);
+    serial_write_hex(b"PRE_CNTVCT_EL0=0x", timer_before_wait[1]);
+    serial_write_hex(b"PRE_CNTP_CTL_EL0=0x", timer_before_wait[2]);
+    serial_write_hex(b"PRE_CNTV_CTL_EL0=0x", timer_before_wait[3]);
+    // CNTVCT_EL0 was verified readable and advancing in the pre-wait snapshot.
+    // Bound the smoke test to one architectural second, not an instruction count:
+    // QEMU TCG speed varies and a short spin loop can finish before a 10 ms tick.
+    let wait_start = arch::aarch64::timer::counter();
+    let wait_budget = arch::aarch64::timer::frequency();
     while arch::aarch64::timer::ticks() < 3
-        && arch::aarch64::timer::counter() < deadline
+        && arch::aarch64::timer::counter().wrapping_sub(wait_start) < wait_budget
     {
         core::hint::spin_loop();
     }
     let ticks = arch::aarch64::timer::ticks();
+    let elapsed = arch::aarch64::timer::counter().wrapping_sub(wait_start);
+    serial_write_hex(b"TIMER_LAST_IRQ=0x", arch::aarch64::timer::last_interrupt_id());
+    serial_write_hex(b"TIMER_UNEXPECTED_IRQS=0x", arch::aarch64::timer::unexpected_interrupts());
+    serial_write_hex(b"TIMER_ELAPSED_COUNTER_TICKS=0x", elapsed);
     serial_write_hex(b"TIMER_TICKS=0x", ticks);
+    if ticks < 3 {
+        let gic = arch::aarch64::gic::timer_diagnostics();
+        let timer = arch::aarch64::timer::hardware_diagnostics();
+        serial_write_hex(b"GICD_CTLR=0x", gic[0]);
+        serial_write_hex(b"GICR_CTLR=0x", gic[1]);
+        serial_write_hex(b"GICR_WAKER=0x", gic[2]);
+        serial_write_hex(b"GICR_IGROUPR0=0x", gic[3]);
+        serial_write_hex(b"GICR_ISENABLER0=0x", gic[4]);
+        serial_write_hex(b"GICR_ISPENDR0=0x", gic[5]);
+        serial_write_hex(b"ICC_SRE_EL1=0x", gic[6]);
+        serial_write_hex(b"ICC_PMR_IGRPEN1=0x", gic[7]);
+        serial_write_hex(b"CNTFRQ_EL0=0x", timer[0]);
+        serial_write_hex(b"CNTVCT_EL0=0x", timer[1]);
+        serial_write_hex(b"CNTP_CTL_EL0=0x", timer[2]);
+        serial_write_hex(b"CNTV_CTL_EL0=0x", timer[3]);
+    }
     arch::aarch64::timer::stop();
     if ticks >= 3 {
         serial_write(b"FLX AARCH64 TIMER: PASS\r\n");

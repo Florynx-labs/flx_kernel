@@ -248,17 +248,36 @@ extern "C" fn __flx_aarch64_irq_dispatch() {
     let raw_iar = super::gic::acknowledge_group1();
     let interrupt_id = super::gic::interrupt_id(raw_iar);
     if interrupt_id == 1023 {
-        return; // Architecturally defined spurious interrupt.
+        // A spurious IAR must not cause an immediate exception-return/re-entry loop.
+        super::timer::handle_interrupt(interrupt_id);
+        mask_irq_on_exception_return();
+        return;
     }
 
     super::timer::handle_interrupt(interrupt_id);
     super::gic::end_group1(raw_iar);
 
     if interrupt_id != super::gic::physical_timer_ppi() {
+        // Keep early bring-up diagnosable: EOI the unexpected source and mask IRQ
+        // in the saved PSTATE so the smoke test can report the offending INTID.
         LAST_UNHANDLED_KIND.store(interrupt_id as u64, Ordering::Relaxed);
-        loop {
-            unsafe { core::arch::asm!("wfe", options(nomem, nostack)); }
-        }
+        mask_irq_on_exception_return();
+    }
+}
+
+#[inline]
+fn mask_irq_on_exception_return() {
+    // SPSR_EL1 is the PSTATE restored by ERET. Setting DAIF.I here prevents a
+    // persistent unexpected source from immediately re-entering the IRQ vector.
+    let mut saved = 0u64;
+    unsafe {
+        core::arch::asm!(
+            "mrs {saved}, SPSR_EL1",
+            "orr {saved}, {saved}, #0x80",
+            "msr SPSR_EL1, {saved}",
+            saved = inout(reg) saved,
+            options(nostack, preserves_flags)
+        );
     }
 }
 

@@ -7,12 +7,14 @@ use super::gic;
 static TICKS: AtomicU64 = AtomicU64::new(0);
 static RELOAD_TICKS: AtomicU64 = AtomicU64::new(0);
 static COUNTER_FREQUENCY: AtomicU64 = AtomicU64::new(0);
+static LAST_INTERRUPT_ID: AtomicU64 = AtomicU64::new(u64::MAX);
+static UNEXPECTED_INTERRUPTS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimerError {
     WrongExceptionLevel(u8),
     InvalidPeriod,
-    RedistributorWakeTimeout,
+    Gic(gic::GicError),
 }
 
 #[inline]
@@ -73,10 +75,19 @@ pub unsafe fn init_periodic(period_ms: u64) -> Result<(), TimerError> {
     RELOAD_TICKS.store(reload, Ordering::Release);
     COUNTER_FREQUENCY.store(frequency, Ordering::Release);
 
-    // Keep the timer disabled while the GIC PPI and CPU interface are configured.
-    unsafe { core::arch::asm!("msr CNTP_CTL_EL0, xzr", options(nomem, nostack, preserves_flags)); }
+    // UEFI may leave its virtual timer running. The kernel takes ownership
+    // of the EL1 timer interrupt path, so disable both sources before GIC setup.
+    // SAFETY: EL1 timer control registers are accessible at EL1.
     unsafe {
-        gic::init_physical_timer_ppi().map_err(|_| TimerError::RedistributorWakeTimeout)?;
+        core::arch::asm!(
+            "msr CNTV_CTL_EL0, xzr",
+            "msr CNTP_CTL_EL0, xzr",
+            "isb",
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    unsafe {
+        gic::init_physical_timer_ppi().map_err(TimerError::Gic)?;
     }
     program_next_tick(reload);
 
@@ -101,11 +112,29 @@ pub fn frequency() -> u64 {
 }
 
 pub(crate) fn handle_interrupt(interrupt_id: u32) {
+    LAST_INTERRUPT_ID.store(interrupt_id as u64, Ordering::Release);
     if interrupt_id == gic::physical_timer_ppi() {
         TICKS.fetch_add(1, Ordering::AcqRel);
         let reload = RELOAD_TICKS.load(Ordering::Acquire);
         if reload != 0 {
             program_next_tick(reload);
         }
+    } else {
+        UNEXPECTED_INTERRUPTS.fetch_add(1, Ordering::AcqRel);
     }
+}
+
+pub fn last_interrupt_id() -> u64 { LAST_INTERRUPT_ID.load(Ordering::Acquire) }
+pub fn unexpected_interrupts() -> u64 { UNEXPECTED_INTERRUPTS.load(Ordering::Acquire) }
+
+/// Returns CNTFRQ_EL0, CNTVCT_EL0 and CNTP_CTL_EL0 for early-boot diagnostics.
+pub fn hardware_diagnostics() -> [u64; 4] {
+    let mut physical_control = 0u64;
+    let mut virtual_control = 0u64;
+    // SAFETY: these architectural timer registers are readable at EL1.
+    unsafe {
+        core::arch::asm!("mrs {value}, CNTP_CTL_EL0", value = out(reg) physical_control, options(nomem, nostack, preserves_flags));
+        core::arch::asm!("mrs {value}, CNTV_CTL_EL0", value = out(reg) virtual_control, options(nomem, nostack, preserves_flags));
+    }
+    [read_counter_frequency(), counter(), physical_control, virtual_control]
 }
