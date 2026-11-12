@@ -43,7 +43,7 @@ timeout --signal=TERM --kill-after=5s "$TIMEOUT" qemu-system-aarch64 \
   -drive if=pflash,format=raw,readonly=on,file="$CODE_FD" \
   -drive if=pflash,format=raw,file="$VARS_COPY" \
   -drive format=raw,file="fat:rw:$ESP" \
-  -serial stdio -monitor none -d int,guest_errors -D "$DEBUG_LOG" > "$LOG" 2>&1
+  -serial stdio -monitor none -d guest_errors -D "$DEBUG_LOG" > "$LOG" 2>&1
 status=$?
 set -e
 
