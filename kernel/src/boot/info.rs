@@ -1,6 +1,15 @@
 //! Boot information analysis and memory map parsing.
 
-use bootloader_api::info::{BootInfo, MemoryRegionKind};
+use bootloader_api::info::{BootInfo, MemoryRegion, MemoryRegionKind};
+
+use crate::mm::frame::FrameMemoryRegion;
+
+/// Adapt the bootloader descriptor to the architecture-neutral frame allocator contract.
+impl FrameMemoryRegion for MemoryRegion {
+    fn start(&self) -> u64 { self.start }
+    fn end(&self) -> u64 { self.end }
+    fn is_usable(&self) -> bool { self.kind == MemoryRegionKind::Usable }
+}
 
 /// High-level summary of system physical memory reported by UEFI/bootloader.
 #[derive(Debug, Clone, Copy, Default)]
