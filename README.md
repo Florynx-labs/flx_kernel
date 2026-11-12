@@ -54,6 +54,7 @@ FLX Kernel is engineered as a foundational technology base designed to evolve in
 - **Virtual range allocator**: fixed-capacity, bitmap-backed contiguous virtual-page reservation with bounds, alignment, canonical-address, and double-free checks; does not map pages by itself
 - **Sync**: IRQ-safe `Spinlock<T>` (local interrupts are disabled while the lock is held)
 - **Tests / CI**: Python source-contract regression tests and Rust host-side memory tests run before the kernel build and headless QEMU/OVMF boot validation
+- **AArch64 bring-up (experimental)**: a separate `aarch64-unknown-uefi` first-stage image exercises the production AArch64 CPU primitives, EL1 exception vectors, and Generic Timer/GICv3 tick path on QEMU `virt`. This is not a full FLX kernel boot; the dedicated CI job must pass before runtime support is claimed.
 
 **Not implemented yet**: multi-task scheduling, safe user-pointer copy-in/copy-out, complete process exit/reaping semantics, safe user-pointer copy-in/copy-out, complete process exit/reaping semantics, and a production syscall ABI; heap arenas are bounded and independently managed (they do not yet form one contiguous expandable heap); Local APIC / IO-APIC and SMP, VFS/filesystems, networking, and a broad driver model. These are planned in staged milestones; the current paging API is an early foundation, not complete virtual memory management.
 
