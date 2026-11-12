@@ -17,15 +17,16 @@ The normative architectural decision, subsystem boundaries, concurrency rules, D
 | ELF64 Ring 3 launch | Experimental | Single-task launch and write syscall smoke test; no scheduler or reaper. |
 | Scheduler | Policy scaffold | Round-robin policy model only; no production context switch/preemption. |
 | Architecture-neutral CPU contract | In progress | x86_64 and AArch64 implementations; shared spinlock and paging operations use the facade. |
-| AArch64 | Experimental compile check | CPU primitives cross-compile; no UEFI kernel boot, exception vectors, timer, or GIC integration. |
+| AArch64 bring-up | Experimental | Separate UEFI first-stage image exercises production CPU primitives, EL1 vectors, and Generic Timer/GICv3 smoke path; this is not a full FLX kernel boot. |
 | RISC-V 64 | Planned | No implementation or boot proof yet. |
 | VFS, storage, networking, production IPC/capabilities | Not implemented | Roadmap only; no support claim. |
 | SMP and IOMMU/DMA isolation | Not implemented | Requires per-CPU state, shootdowns, and device ownership. |
 
 ## Architecture support policy
 
-- x86_64 is the only boot-validated kernel target today.
-- AArch64 cross-compilation is not equivalent to a successful boot.
+- x86_64 is the only full FLX kernel target boot-validated today.
+- AArch64 has a separate first-stage UEFI/QEMU bring-up image; it does not boot the full kernel or establish full-target support.
+- AArch64 runtime support claims require the dedicated QEMU smoke job to pass, including the controlled exception and periodic timer markers.
 - RISC-V and other architectures remain planned until real architecture-specific entry, exception, timer, and QEMU boot tests exist.
 - Generic policy code must not issue architecture-specific privileged instructions directly.
 - Unsupported operations must fail explicitly; do not substitute no-op implementations.
@@ -33,8 +34,8 @@ The normative architectural decision, subsystem boundaries, concurrency rules, D
 ## Roadmap
 
 1. Keep x86_64 UEFI, paging, Ring 3, and CI regression coverage green.
-2. Complete the architecture HAL and validate an AArch64 UEFI boot path.
-3. Add AArch64 exception vectors, Generic Timer, and GIC support with QEMU tests.
+2. Complete the architecture HAL and promote the AArch64 first-stage bring-up into a full-kernel UEFI boot path.
+3. Integrate AArch64 exception vectors, Generic Timer, and GIC support with the full kernel and retain independent QEMU runtime tests.
 4. Complete task/thread context lifecycle and safe address-space ownership before preemption/SMP.
 5. Add versioned syscall and capability-checked IPC contracts.
 6. Add VFS, storage, networking, and a constrained driver model.
