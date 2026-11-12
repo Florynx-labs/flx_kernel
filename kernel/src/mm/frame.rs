@@ -25,6 +25,12 @@ pub enum FrameError {
     DoubleFree,
     /// The frame is reserved memory and was never handed out by this allocator.
     NotAllocated,
+    /// A usable memory-map region is malformed or overlaps another usable region.
+    InvalidMemoryMap,
+    /// A physical-memory address calculation overflowed.
+    AddressOverflow,
+    /// The physical-memory mapping does not satisfy bitmap alignment requirements.
+    InvalidMapping,
 }
 
 /// Minimal memory-map contract consumed by the physical frame allocator.
@@ -53,8 +59,8 @@ pub struct BitmapFrameAllocator {
     next_hint: usize,
 }
 
-const fn align_up(value: u64, align: u64) -> u64 {
-    (value + align - 1) & !(align - 1)
+fn checked_align_up(value: u64, align: u64) -> Option<u64> {
+    value.checked_add(align - 1).map(|value| value & !(align - 1))
 }
 
 const fn align_down(value: u64, align: u64) -> u64 {
@@ -68,6 +74,7 @@ impl BitmapFrameAllocator {
     /// `phys_offset` must be the virtual offset at which *all* physical memory in `regions`
     /// is linearly mapped and writable, and regions marked usable must really be unused.
     unsafe fn new<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64) -> Result<Self, FrameError> {
+        validate_usable_regions(regions)?;
         let max_addr = regions
             .iter()
             .filter(|r| r.is_usable())
@@ -75,14 +82,15 @@ impl BitmapFrameAllocator {
             .max()
             .ok_or(FrameError::NoSpaceForBitmap)?;
 
-        let total_frames = (align_up(max_addr, FRAME_SIZE) / FRAME_SIZE) as usize;
+        let aligned_max = checked_align_up(max_addr, FRAME_SIZE).ok_or(FrameError::AddressOverflow)?;
+        let total_frames = usize::try_from(aligned_max / FRAME_SIZE).map_err(|_| FrameError::AddressOverflow)?;
         let words = total_frames.div_ceil(64);
         // Two bitmaps: one records used/free frames; the other records frames actually
         // allocated by this allocator. This prevents freeing firmware/reserved memory.
-        let metadata_bytes = (words as u64)
-            .checked_mul(16)
-            .ok_or(FrameError::NoSpaceForBitmap)?;
-        let metadata_frames = align_up(metadata_bytes, FRAME_SIZE) / FRAME_SIZE;
+        let words_u64 = u64::try_from(words).map_err(|_| FrameError::AddressOverflow)?;
+        let metadata_bytes = words_u64.checked_mul(16).ok_or(FrameError::AddressOverflow)?;
+        let metadata_size = checked_align_up(metadata_bytes, FRAME_SIZE).ok_or(FrameError::AddressOverflow)?;
+        let metadata_frames = metadata_size / FRAME_SIZE;
 
         // Find a usable region (above MIN_PHYS_ADDR) that can host both bitmaps.
         let bitmap_phys = regions
@@ -91,16 +99,25 @@ impl BitmapFrameAllocator {
             .find_map(|r| {
                 let start = align_up(r.start().max(MIN_PHYS_ADDR), FRAME_SIZE);
                 let end = align_down(r.end(), FRAME_SIZE);
-                (end > start && end - start >= metadata_frames * FRAME_SIZE).then_some(start)
+                (end > start && end - start >= metadata_size).then_some(start)
             })
             .ok_or(FrameError::NoSpaceForBitmap)?;
 
-        let bitmap_ptr = (phys_offset + bitmap_phys) as *mut u64;
+        let bitmap_virtual = phys_offset.checked_add(bitmap_phys).ok_or(FrameError::AddressOverflow)?;
+        let allocated_phys = bitmap_phys.checked_add(words_u64.checked_mul(8).ok_or(FrameError::AddressOverflow)?)
+            .ok_or(FrameError::AddressOverflow)?;
+        let allocated_virtual = phys_offset.checked_add(allocated_phys).ok_or(FrameError::AddressOverflow)?;
+        if bitmap_virtual % core::mem::align_of::<u64>() as u64 != 0
+            || allocated_virtual % core::mem::align_of::<u64>() as u64 != 0
+        {
+            return Err(FrameError::InvalidMapping);
+        }
+        let bitmap_ptr = bitmap_virtual as *mut u64;
         let bitmap = core::slice::from_raw_parts_mut(bitmap_ptr, words);
         bitmap.fill(u64::MAX); // everything used until proven free
 
         // Place the ownership bitmap directly after the used/free bitmap.
-        let allocated_ptr = (phys_offset + bitmap_phys + (words as u64) * 8) as *mut u64;
+        let allocated_ptr = allocated_virtual as *mut u64;
         let allocated = core::slice::from_raw_parts_mut(allocated_ptr, words);
         allocated.fill(0);
 
@@ -210,6 +227,34 @@ impl BitmapFrameAllocator {
         }
         Ok(())
     }
+}
+
+/// Reject malformed or overlapping usable ranges before changing allocator accounting.
+fn validate_usable_regions<R: FrameMemoryRegion>(regions: &[R]) -> Result<(), FrameError> {
+    for (index, region) in regions.iter().enumerate().filter(|(_, region)| region.is_usable()) {
+        if region.end() < region.start() {
+            return Err(FrameError::InvalidMemoryMap);
+        }
+        let start = checked_align_up(region.start().max(MIN_PHYS_ADDR), FRAME_SIZE)
+            .ok_or(FrameError::AddressOverflow)?;
+        let end = align_down(region.end(), FRAME_SIZE);
+        if start >= end {
+            continue;
+        }
+
+        for previous in regions[..index].iter().filter(|candidate| candidate.is_usable()) {
+            if previous.end() < previous.start() {
+                return Err(FrameError::InvalidMemoryMap);
+            }
+            let previous_start = checked_align_up(previous.start().max(MIN_PHYS_ADDR), FRAME_SIZE)
+                .ok_or(FrameError::AddressOverflow)?;
+            let previous_end = align_down(previous.end(), FRAME_SIZE);
+            if previous_start < previous_end && start < previous_end && previous_start < end {
+                return Err(FrameError::InvalidMemoryMap);
+            }
+        }
+    }
+    Ok(())
 }
 
 static ALLOCATOR: Spinlock<Option<BitmapFrameAllocator>> = Spinlock::new(None);
