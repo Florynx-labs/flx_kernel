@@ -263,6 +263,7 @@ extern "C" fn __flx_aarch64_irq_dispatch() {
         LAST_UNHANDLED_KIND.store(interrupt_id as u64, Ordering::Relaxed);
         mask_irq_on_exception_return();
     }
+}
 
 #[inline]
 fn mask_irq_on_exception_return() {
@@ -277,7 +278,6 @@ fn mask_irq_on_exception_return() {
             options(nostack, preserves_flags)
         );
     }
-}
 }
 
 #[no_mangle]
