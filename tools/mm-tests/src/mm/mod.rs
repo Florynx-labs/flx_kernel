@@ -5,6 +5,9 @@ pub mod elf;
 #[path = "../../../../kernel/src/mm/elf_loader.rs"]
 pub mod elf_loader;
 
+#[path = "../../../../kernel/src/mm/mapper.rs"]
+pub mod mapper;
+
 #[path = "../../../../kernel/src/mm/frame.rs"]
 pub mod frame;
 
