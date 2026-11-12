@@ -97,7 +97,7 @@ impl BitmapFrameAllocator {
             .iter()
             .filter(|r| r.is_usable())
             .find_map(|r| {
-                let start = align_up(r.start().max(MIN_PHYS_ADDR), FRAME_SIZE);
+                let start = checked_align_up(r.start().max(MIN_PHYS_ADDR), FRAME_SIZE)?;
                 let end = align_down(r.end(), FRAME_SIZE);
                 (end > start && end - start >= metadata_size).then_some(start)
             })
@@ -131,7 +131,8 @@ impl BitmapFrameAllocator {
 
         // Free every frame of every usable region (>= MIN_PHYS_ADDR).
         for region in regions.iter().filter(|r| r.is_usable()) {
-            let start = align_up(region.start().max(MIN_PHYS_ADDR), FRAME_SIZE);
+            let start = checked_align_up(region.start().max(MIN_PHYS_ADDR), FRAME_SIZE)
+                .ok_or(FrameError::AddressOverflow)?;
             let end = align_down(region.end(), FRAME_SIZE);
             let mut addr = start;
             while addr < end {
