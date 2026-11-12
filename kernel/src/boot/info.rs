@@ -3,7 +3,7 @@
 use bootloader_api::info::{BootInfo, MemoryRegion, MemoryRegionKind};
 use core::ptr::NonNull;
 
-use crate::mm::frame::{FrameMemoryRegion, PhysicalMemoryMapper};
+use crate::mm::{frame::FrameMemoryRegion, mapper::PhysicalMemoryMapper};
 
 /// Adapt the bootloader descriptor to the architecture-neutral frame allocator contract.
 impl FrameMemoryRegion for MemoryRegion {
