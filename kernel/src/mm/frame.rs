@@ -5,6 +5,8 @@
 //! usable region large enough to hold it and accessed through the bootloader's
 //! physical-memory mapping. Frames below 1 MiB are never handed out.
 
+use core::ptr::NonNull;
+
 use crate::sync::Spinlock;
 
 /// Size of a physical frame in bytes.
@@ -43,6 +45,20 @@ pub trait FrameMemoryRegion {
     fn is_usable(&self) -> bool;
 }
 
+/// Maps a physical byte range into a writable kernel virtual address.
+///
+/// # Safety
+/// Implementations must return a pointer that remains valid for the requested range for
+/// the lifetime of the kernel. The mapping must be writable, contiguous, and correctly
+/// aligned for any type the caller places there. The physical range must be backed by RAM.
+pub unsafe trait PhysicalMemoryMapper {
+    /// Resolve a physical range. A zero-sized range may return a non-null aligned pointer.
+    ///
+    /// # Safety
+    /// The caller must uphold the mapper implementation's range and lifetime contract.
+    unsafe fn map_physical(&self, physical_address: u64, size: usize) -> Option<NonNull<u8>>;
+}
+
 /// Snapshot of allocator statistics.
 #[derive(Debug, Clone, Copy)]
 pub struct FrameStats {
@@ -71,9 +87,12 @@ impl BitmapFrameAllocator {
     /// Builds the allocator from an architecture-neutral memory map.
     ///
     /// # Safety
-    /// `phys_offset` must be the virtual offset at which *all* physical memory in `regions`
-    /// is linearly mapped and writable, and regions marked usable must really be unused.
-    unsafe fn new<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64) -> Result<Self, FrameError> {
+    /// The mapper must provide valid writable mappings for every requested range, and
+    /// regions marked usable must really be unused.
+    unsafe fn new<R: FrameMemoryRegion, M: PhysicalMemoryMapper>(
+        regions: &[R],
+        mapper: &M,
+    ) -> Result<Self, FrameError> {
         validate_usable_regions(regions)?;
         let max_addr = regions
             .iter()
@@ -103,22 +122,30 @@ impl BitmapFrameAllocator {
             })
             .ok_or(FrameError::NoSpaceForBitmap)?;
 
-        let bitmap_virtual = phys_offset.checked_add(bitmap_phys).ok_or(FrameError::AddressOverflow)?;
-        let allocated_phys = bitmap_phys.checked_add(words_u64.checked_mul(8).ok_or(FrameError::AddressOverflow)?)
+        let bitmap_bytes = words.checked_mul(core::mem::size_of::<u64>())
             .ok_or(FrameError::AddressOverflow)?;
-        let allocated_virtual = phys_offset.checked_add(allocated_phys).ok_or(FrameError::AddressOverflow)?;
-        if bitmap_virtual % core::mem::align_of::<u64>() as u64 != 0
-            || allocated_virtual % core::mem::align_of::<u64>() as u64 != 0
+        let bitmap_ptr = unsafe { mapper.map_physical(bitmap_phys, bitmap_bytes) }
+            .ok_or(FrameError::InvalidMapping)?;
+        let allocated_phys = bitmap_phys
+            .checked_add(words_u64.checked_mul(8).ok_or(FrameError::AddressOverflow)?)
+            .ok_or(FrameError::AddressOverflow)?;
+        let allocated_ptr = unsafe { mapper.map_physical(allocated_phys, bitmap_bytes) }
+            .ok_or(FrameError::InvalidMapping)?;
+        if bitmap_ptr.as_ptr() as usize % core::mem::align_of::<u64>() != 0
+            || allocated_ptr.as_ptr() as usize % core::mem::align_of::<u64>() != 0
         {
             return Err(FrameError::InvalidMapping);
         }
-        let bitmap_ptr = bitmap_virtual as *mut u64;
-        let bitmap = core::slice::from_raw_parts_mut(bitmap_ptr, words);
+        // SAFETY: the mapper contract guarantees each pointer covers bitmap_bytes writable
+        // bytes for the kernel lifetime; the allocator owns these usable physical ranges.
+        let bitmap = unsafe { core::slice::from_raw_parts_mut(bitmap_ptr.cast::<u64>().as_ptr(), words) };
         bitmap.fill(u64::MAX); // everything used until proven free
 
         // Place the ownership bitmap directly after the used/free bitmap.
-        let allocated_ptr = allocated_virtual as *mut u64;
-        let allocated = core::slice::from_raw_parts_mut(allocated_ptr, words);
+        // SAFETY: same mapper guarantee as the primary bitmap above.
+        let allocated = unsafe {
+            core::slice::from_raw_parts_mut(allocated_ptr.cast::<u64>().as_ptr(), words)
+        };
         allocated.fill(0);
 
         let mut alloc = Self {
@@ -263,10 +290,13 @@ static ALLOCATOR: Spinlock<Option<BitmapFrameAllocator>> = Spinlock::new(None);
 /// Initializes the global frame allocator.
 ///
 /// # Safety
-/// See [`BitmapFrameAllocator::new`]: `phys_offset` must map all physical memory and the
+/// The mapper must return valid writable mappings for requested physical ranges, and the
 /// regions marked usable in `regions` must not be in use by anything else.
-pub unsafe fn init<R: FrameMemoryRegion>(regions: &[R], phys_offset: u64) -> Result<FrameStats, FrameError> {
-    let allocator = BitmapFrameAllocator::new(regions, phys_offset)?;
+pub unsafe fn init<R: FrameMemoryRegion, M: PhysicalMemoryMapper>(
+    regions: &[R],
+    mapper: &M,
+) -> Result<FrameStats, FrameError> {
+    let allocator = BitmapFrameAllocator::new(regions, mapper)?;
     let stats = FrameStats {
         total_frames: allocator.total_frames,
         free_frames: allocator.free_frames,
