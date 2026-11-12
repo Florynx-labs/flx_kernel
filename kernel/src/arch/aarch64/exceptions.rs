@@ -269,12 +269,13 @@ extern "C" fn __flx_aarch64_irq_dispatch() {
 fn mask_irq_on_exception_return() {
     // SPSR_EL1 is the PSTATE restored by ERET. Setting DAIF.I here prevents a
     // persistent unexpected source from immediately re-entering the IRQ vector.
+    let mut saved = 0u64;
     unsafe {
         core::arch::asm!(
             "mrs {saved}, SPSR_EL1",
             "orr {saved}, {saved}, #0x80",
             "msr SPSR_EL1, {saved}",
-            saved = out(reg) _,
+            saved = inout(reg) saved,
             options(nostack, preserves_flags)
         );
     }
