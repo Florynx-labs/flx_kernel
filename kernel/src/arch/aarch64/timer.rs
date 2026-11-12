@@ -75,8 +75,17 @@ pub unsafe fn init_periodic(period_ms: u64) -> Result<(), TimerError> {
     RELOAD_TICKS.store(reload, Ordering::Release);
     COUNTER_FREQUENCY.store(frequency, Ordering::Release);
 
-    // Keep the timer disabled while the GIC PPI and CPU interface are configured.
-    unsafe { core::arch::asm!("msr CNTP_CTL_EL0, xzr", options(nomem, nostack, preserves_flags)); }
+    // UEFI may leave its virtual timer running. The kernel takes ownership
+    // of the EL1 timer interrupt path, so disable both sources before GIC setup.
+    // SAFETY: EL1 timer control registers are accessible at EL1.
+    unsafe {
+        core::arch::asm!(
+            "msr CNTV_CTL_EL0, xzr",
+            "msr CNTP_CTL_EL0, xzr",
+            "isb",
+            options(nomem, nostack, preserves_flags)
+        );
+    }
     unsafe {
         gic::init_physical_timer_ppi().map_err(TimerError::Gic)?;
     }
