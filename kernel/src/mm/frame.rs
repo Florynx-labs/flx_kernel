@@ -5,8 +5,7 @@
 //! usable region large enough to hold it and accessed through an injected
 //! physical-memory mapper. Frames below 1 MiB are never handed out.
 
-use core::ptr::NonNull;
-
+use crate::mm::mapper::PhysicalMemoryMapper;
 use crate::sync::Spinlock;
 
 /// Size of a physical frame in bytes.
@@ -43,20 +42,6 @@ pub trait FrameMemoryRegion {
     fn start(&self) -> u64;
     fn end(&self) -> u64;
     fn is_usable(&self) -> bool;
-}
-
-/// Maps a physical byte range into a writable kernel virtual address.
-///
-/// # Safety
-/// Implementations must return a pointer that remains valid for the requested range for
-/// the lifetime of the kernel. The mapping must be writable, contiguous, and correctly
-/// aligned for any type the caller places there. The physical range must be backed by RAM.
-pub unsafe trait PhysicalMemoryMapper {
-    /// Resolve a physical range. A zero-sized range may return a non-null aligned pointer.
-    ///
-    /// # Safety
-    /// The caller must uphold the mapper implementation's range and lifetime contract.
-    unsafe fn map_physical(&self, physical_address: u64, size: usize) -> Option<NonNull<u8>>;
 }
 
 /// Snapshot of allocator statistics.
