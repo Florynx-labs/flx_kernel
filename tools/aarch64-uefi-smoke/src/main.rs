@@ -115,6 +115,20 @@ pub extern "efiapi" fn efi_main(
         <arch::aarch64::AArch64 as CpuArchitecture>::halt_forever();
     }
     serial_write(b"FLX AARCH64 TIMER: READY\r\n");
+    // Capture the programmed hardware state before unmasked IRQ delivery can
+    // monopolize the CPU; this distinguishes timer programming from IRQ dispatch.
+    let gic_before_wait = arch::aarch64::gic::timer_diagnostics();
+    let timer_before_wait = arch::aarch64::timer::hardware_diagnostics();
+    serial_write_hex(b"PRE_GICD_CTLR=0x", gic_before_wait[0]);
+    serial_write_hex(b"PRE_GICR_WAKER=0x", gic_before_wait[2]);
+    serial_write_hex(b"PRE_GICR_IGROUPR0=0x", gic_before_wait[3]);
+    serial_write_hex(b"PRE_GICR_ISENABLER0=0x", gic_before_wait[4]);
+    serial_write_hex(b"PRE_GICR_ISPENDR0=0x", gic_before_wait[5]);
+    serial_write_hex(b"PRE_ICC_SRE_EL1=0x", gic_before_wait[6]);
+    serial_write_hex(b"PRE_ICC_PMR_IGRPEN1=0x", gic_before_wait[7]);
+    serial_write_hex(b"PRE_CNTFRQ_EL0=0x", timer_before_wait[0]);
+    serial_write_hex(b"PRE_CNTVCT_EL0=0x", timer_before_wait[1]);
+    serial_write_hex(b"PRE_CNTP_CTL_EL0=0x", timer_before_wait[2]);
     // Use an instruction watchdog, not CNTVCT, so a stopped or inaccessible
     // architectural counter cannot trap the smoke test in an unbounded wait.
     let mut watchdog = 10_000_000u64;
