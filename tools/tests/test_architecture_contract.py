@@ -29,9 +29,11 @@ class ArchitectureBoundaryTests(unittest.TestCase):
 
     def test_frame_allocator_uses_injected_physical_mapper(self):
         frame = (ROOT / "kernel/src/mm/frame.rs").read_text()
+        mapper = (ROOT / "kernel/src/mm/mapper.rs").read_text()
         boot = (ROOT / "kernel/src/boot/info.rs").read_text()
         main = (ROOT / "kernel/src/main.rs").read_text()
-        self.assertIn("pub unsafe trait PhysicalMemoryMapper", frame)
+        self.assertIn("pub unsafe trait PhysicalMemoryMapper", mapper)
+        self.assertIn("use crate::mm::mapper::PhysicalMemoryMapper", frame)
         self.assertIn("mapper.map_physical(bitmap_phys, bitmap_bytes)", frame)
         self.assertIn("pub struct LinearPhysicalMemoryMapper", boot)
         self.assertIn("unsafe impl PhysicalMemoryMapper for LinearPhysicalMemoryMapper", boot)
