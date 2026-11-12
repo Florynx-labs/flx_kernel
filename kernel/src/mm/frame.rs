@@ -2,8 +2,8 @@
 //!
 //! One bit per 4 KiB frame (1 = used, 0 = free) covering physical addresses from 0 up to
 //! the end of the highest usable region. The bitmap itself is carved out of the first
-//! usable region large enough to hold it and accessed through the bootloader's
-//! physical-memory mapping. Frames below 1 MiB are never handed out.
+//! usable region large enough to hold it and accessed through an injected
+//! physical-memory mapper. Frames below 1 MiB are never handed out.
 
 use core::ptr::NonNull;
 
@@ -131,8 +131,13 @@ impl BitmapFrameAllocator {
             .ok_or(FrameError::AddressOverflow)?;
         let allocated_ptr = unsafe { mapper.map_physical(allocated_phys, bitmap_bytes) }
             .ok_or(FrameError::InvalidMapping)?;
-        if bitmap_ptr.as_ptr() as usize % core::mem::align_of::<u64>() != 0
-            || allocated_ptr.as_ptr() as usize % core::mem::align_of::<u64>() != 0
+        let bitmap_start = bitmap_ptr.as_ptr() as usize;
+        let allocated_start = allocated_ptr.as_ptr() as usize;
+        let bitmap_end = bitmap_start.checked_add(bitmap_bytes).ok_or(FrameError::AddressOverflow)?;
+        let allocated_end = allocated_start.checked_add(bitmap_bytes).ok_or(FrameError::AddressOverflow)?;
+        if bitmap_start % core::mem::align_of::<u64>() != 0
+            || allocated_start % core::mem::align_of::<u64>() != 0
+            || (bitmap_start < allocated_end && allocated_start < bitmap_end)
         {
             return Err(FrameError::InvalidMapping);
         }
