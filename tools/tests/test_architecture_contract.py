@@ -58,6 +58,13 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("__flx_aarch64_irq_dispatch", exceptions)
         self.assertIn("super::timer::handle_interrupt(interrupt_id)", exceptions)
 
+
+    def test_aarch64_timer_smoke_uses_counter_bounded_wait(self):
+        source = (ROOT / "tools/aarch64-uefi-smoke/src/main.rs").read_text()
+        self.assertIn("let wait_budget = arch::aarch64::timer::frequency()", source)
+        self.assertIn("counter().wrapping_sub(wait_start) < wait_budget", source)
+        self.assertNotIn("10_000_000u64", source)
+
     def test_aarch64_spinlock_masks_only_irq_and_preserves_daif_state(self):
         source = (ROOT / "kernel/src/arch/aarch64/mod.rs").read_text()
         self.assertIn('asm!("msr daifset, #2"', source)
