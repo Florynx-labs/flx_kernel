@@ -57,6 +57,8 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertIn("CNTFRQ_EL0", timer)
         self.assertIn("__flx_aarch64_irq_dispatch", exceptions)
         self.assertIn("super::timer::handle_interrupt(interrupt_id)", exceptions)
+        self.assertIn("mask_irq_on_exception_return()", exceptions)
+        self.assertIn("msr SPSR_EL1", exceptions)
 
 
     def test_aarch64_timer_smoke_uses_counter_bounded_wait(self):
