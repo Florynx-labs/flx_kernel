@@ -46,8 +46,8 @@ Common code must call explicit contracts. A capability must not appear available
 
 Current state:
 - **Implemented:** x86_64 CPU controls, GDT/TSS, IDT, exception/interrupt dispatch, syscall entry, UEFI boot.
-- **Experimental:** AArch64 CPU primitives and a small architecture contract cross-check.
-- **Not implemented:** AArch64 UEFI boot, vector table, Generic Timer/GIC integration; RISC-V boot and trap path.
+- **Experimental:** AArch64 first-stage UEFI bring-up image, EL1 exception-vector validation, and Generic Timer/GICv3 physical-timer smoke path. These are isolated bring-up tests, not a boot of the full FLX kernel.
+- **Not implemented:** full AArch64 FLX kernel boot, AArch64 memory-management and scheduler integration, production interrupt/device framework, and RISC-V boot/trap path.
 
 ### 3.2 Memory management
 
@@ -115,7 +115,7 @@ Record CPU model, QEMU version/configuration, memory size, compiler/toolchain, i
 | Target | Compile check | Real boot | Runtime status |
 |---|---|---|---|
 | x86_64 UEFI | CI | QEMU/OVMF CI | Ring 3 ELF + write syscall smoke test |
-| AArch64 | CPU primitive cross-check | Not yet | No kernel boot claim |
+| AArch64 | CPU primitive cross-check + UEFI smoke-image build | QEMU `virt` first-stage UEFI image only; full kernel not booted | EL1 controlled exception + Generic Timer/GICv3 tick smoke assertions; full kernel support remains experimental and CI must pass before claiming runtime validation |
 | RISC-V 64 | Not yet | Not yet | Planned |
 | LoongArch64 | Not yet | Not yet | Research only |
 
