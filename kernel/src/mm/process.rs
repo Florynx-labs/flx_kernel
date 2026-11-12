@@ -47,7 +47,7 @@ impl UserProcess {
     pub unsafe fn prepare(bytes: &[u8], phys_offset: u64) -> Result<Self, ProcessError> {
         // SAFETY: forwarded contract guarantees the bootloader physical mapping is valid.
     
-        let mut adress_space = unsafe { AdressSpace::new(phys_offset) }
+        let mut address_space = unsafe { AddressSpace::new(phys_offset) }
             .map_err(ProcessError::AddressSpace)?;
 
         if let Err(error) = usermode::prepare_kernel_stack(&mut address_space) {
