@@ -43,7 +43,7 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // 0. Interrupts stay off until our own GDT/IDT/PIC are installed: the firmware's
     //    interrupt state and vector mapping must not be trusted.
-    arch::x86_64::cpu::disable_interrupts();
+    arch::disable_local_interrupts();
 
     // 1. Initialize COM1 Serial port first (before any other output).
     drivers::serial::SERIAL1.lock().init();
@@ -86,7 +86,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             Ok(()) => kok!("Kernel heap (1 MiB early arena)"),
             Err(error) => {
                 kerror!("Kernel heap self-test failed: {}", error);
-                loop { arch::x86_64::cpu::halt(); }
+                loop { arch::halt_forever(); }
             }
         },
         Err(error) => {
@@ -126,12 +126,13 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     kok!("Framebuffer");
 
     // 8. CPU tables: GDT + TSS, then IDT (exceptions) and a breakpoint self-test.
-    arch::x86_64::gdt::init();
-    kok!("GDT + TSS (IST: double fault, NMI)");
-    arch::x86_64::idt::init();
-    arch::x86_64::syscall::init();
-    arch::x86_64::interrupts::trigger_breakpoint();
-    kok!("IDT + CPU exceptions (breakpoint self-test)");
+    match arch::initialize_cpu_tables() {
+        Ok(()) => kok!("Architecture CPU tables / exception vectors"),
+        Err(error) => {
+            kerror!("Architecture CPU initialization failed: {:?}", error);
+            arch::halt_forever();
+        }
+    }
 
     // 9. Physical memory: frame allocator + self-test.
     match phys_offset {
@@ -196,7 +197,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     drivers::pic::init();
     drivers::pit::init();
     drivers::keyboard::init();
-    arch::x86_64::cpu::enable_interrupts();
+    arch::enable_local_interrupts();
 
     // Bounded wait: prove the timer IRQ fires without risking a hang if it does not.
     let mut spins: u64 = 0;
@@ -254,6 +255,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             crate::serial_print!("{}", c as char);
             crate::fb_print!("{}", c as char);
         }
-        arch::x86_64::cpu::halt();
+        arch::halt_forever();
     }
 }
