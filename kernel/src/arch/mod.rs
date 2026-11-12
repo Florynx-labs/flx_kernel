@@ -51,3 +51,33 @@ pub fn logical_cpu_id() -> u64 {
 pub fn halt_forever() -> ! {
     <ActiveCpu as interface::CpuArchitecture>::halt_forever()
 }
+
+
+/// Errors reported while installing the architecture-specific CPU exception environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuInitError {
+    Aarch64WrongExceptionLevel(u8),
+}
+
+/// Install the CPU tables/vectors required before enabling local interrupts.
+///
+/// The common kernel entry point must use this facade instead of reaching into
+/// architecture-specific GDT/IDT/vector modules directly.
+pub fn initialize_cpu_tables() -> Result<(), CpuInitError> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        x86_64::gdt::init();
+        x86_64::idt::init();
+        x86_64::syscall::init();
+        x86_64::interrupts::trigger_breakpoint();
+        Ok(())
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: this is called during privileged kernel initialization, before IRQs
+        // are enabled. The architecture entry must provide a valid kernel stack.
+        unsafe { aarch64::exceptions::install_el1_vectors() }
+            .map_err(CpuInitError::Aarch64WrongExceptionLevel)
+    }
+}
