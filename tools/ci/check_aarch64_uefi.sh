@@ -23,6 +23,7 @@ fi
 
 VARS_COPY="$(mktemp)"
 LOG="aarch64-uefi-serial.log"
+DEBUG_LOG="aarch64-uefi-qemu-debug.log"
 ESP="$(mktemp -d)"
 cleanup() { rm -f "$VARS_COPY"; rm -rf "$ESP"; }
 trap cleanup EXIT
@@ -42,12 +43,14 @@ timeout --signal=TERM --kill-after=5s "$TIMEOUT" qemu-system-aarch64 \
   -drive if=pflash,format=raw,readonly=on,file="$CODE_FD" \
   -drive if=pflash,format=raw,file="$VARS_COPY" \
   -drive format=raw,file="fat:rw:$ESP" \
-  -serial stdio -monitor none > "$LOG" 2>&1
+  -serial stdio -monitor none -d int,guest_errors -D "$DEBUG_LOG" > "$LOG" 2>&1
 status=$?
 set -e
 
 cat "$LOG"
 if [[ "$status" -ne 124 ]]; then
+  echo "---- QEMU exception/interrupt trace (last 160 lines) ----"
+  tail -n 160 "$DEBUG_LOG" || true
   echo "::error::QEMU AArch64 UEFI exited unexpectedly (status $status)"
   exit 1
 fi
