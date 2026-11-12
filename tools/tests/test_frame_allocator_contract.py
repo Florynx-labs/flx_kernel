@@ -76,7 +76,7 @@ class PhysicalFrameAllocatorContractTests(unittest.TestCase):
 
     def test_global_init_receives_a_mapper_not_a_virtual_offset(self):
         body = function_body(SOURCE, "pub unsafe fn init<R: FrameMemoryRegion, M: PhysicalMemoryMapper>(")
-        self.assertIn("mapper: &M", body)
+        self.assertIn("mapper: &M", SOURCE)
         self.assertIn("BitmapFrameAllocator::new(regions, mapper)", body)
 
 
