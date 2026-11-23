@@ -41,8 +41,9 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 /// Kernel entry point called by the UEFI bootloader.
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    // 0. Interrupts stay off until our own GDT/IDT/PIC are installed: the firmware's
-    //    interrupt state and vector mapping must not be trusted.
+    // 0. Keep local interrupts masked until this kernel has installed its own
+    //    exception environment and initialized the matching interrupt controller.
+    //    Firmware interrupt state is not part of the kernel's runtime contract.
     arch::disable_local_interrupts();
 
     // 1. Initialize COM1 Serial port first (before any other output).
@@ -91,7 +92,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         },
         Err(error) => {
             kerror!("Kernel heap initialization failed: {:?}", error);
-            loop { arch::x86_64::cpu::halt(); }
+            arch::halt_forever();
         }
     }
 
@@ -125,7 +126,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     );
     kok!("Framebuffer");
 
-    // 8. CPU tables: GDT + TSS, then IDT (exceptions) and a breakpoint self-test.
+    // 8. Install the target's exception environment through the HAL. On x86_64
+    //    this loads GDT/TSS + IDT and runs the breakpoint self-test; on AArch64
+    //    it publishes the EL1 vector table while interrupts remain masked.
     match arch::initialize_cpu_tables() {
         Ok(()) => kok!("Architecture CPU tables / exception vectors"),
         Err(error) => {
@@ -193,7 +196,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
     }
 
-    // 10. Hardware interrupts: PIC remap, PIT timer (100 Hz), PS/2 keyboard.
+    // 10. x86_64 legacy device path: PIC, PIT (100 Hz), and PS/2 keyboard.
+    //     These drivers remain target-specific until their device interfaces are split.
     drivers::pic::init();
     drivers::pit::init();
     drivers::keyboard::init();
@@ -232,7 +236,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             Some(value) => value,
             None => {
                 kerror!("Userspace smoke test requires the physical-memory mapping");
-                loop { arch::x86_64::cpu::halt(); }
+                arch::halt_forever();
             }
         };
         kok!("Preparing Ring 3 ELF smoke test");
@@ -242,14 +246,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             Ok(process) => process,
             Err(error) => {
                 kerror!("Ring 3 ELF smoke preparation failed: {:?}", error);
-                loop { arch::x86_64::cpu::halt(); }
+                arch::halt_forever();
             }
         };
         // One-way transition: the test ELF writes a marker to COM1 and then spins.
         unsafe { process.enter() }
     }
 
-    // 11. Idle loop: sleep until an interrupt, echo typed characters.
+    // 11. Idle loop: the HAL supplies the architecture-specific low-power wait.
+    //     Keyboard polling remains part of the current x86_64 bring-up path.
     loop {
         while let Some(c) = drivers::keyboard::read_char() {
             crate::serial_print!("{}", c as char);
