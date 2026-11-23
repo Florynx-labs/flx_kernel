@@ -56,7 +56,8 @@ pub fn halt_forever() -> ! {
 /// Errors reported while installing the architecture-specific CPU exception environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpuInitError {
-    Aarch64WrongExceptionLevel(u8),
+    #[cfg(target_arch = "aarch64")]
+    Aarch64VectorInstall(aarch64::exceptions::VectorInstallError),
 }
 
 /// Install the CPU tables/vectors required before enabling local interrupts.
@@ -78,6 +79,6 @@ pub fn initialize_cpu_tables() -> Result<(), CpuInitError> {
         // SAFETY: this is called during privileged kernel initialization, before IRQs
         // are enabled. The architecture entry must provide a valid kernel stack.
         unsafe { aarch64::exceptions::install_el1_vectors() }
-            .map_err(CpuInitError::Aarch64WrongExceptionLevel)
+            .map_err(CpuInitError::Aarch64VectorInstall)
     }
 }
