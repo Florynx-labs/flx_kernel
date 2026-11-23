@@ -63,6 +63,10 @@ Bring-up contract for the next milestone:
 5. Add a real Sv39 page-table backend and an architecture-neutral boot handoff before building
    the production kernel for this target.
 
+Cross-check locally with `rustup target add riscv64gc-unknown-none-elf` followed by
+`cargo check --package flx-riscv64-smoke --target riscv64gc-unknown-none-elf`. The target is
+installed only by the dedicated CI job, not by the default toolchain profile.
+
 The current cross-check does not boot QEMU, install a trap dispatcher, configure PLIC, or
 enable Sv39. Do not label the target experimental-boot-ready until those runtime checks pass.
 
