@@ -6,6 +6,10 @@ pub mod interface;
 pub mod x86_64;
 pub mod aarch64;
 
+// Experimental primitives are compiled only by the dedicated RISC-V cross-check crate.
+#[cfg(target_arch = "riscv64")]
+pub mod riscv64;
+
 #[cfg(target_arch = "x86_64")]
 type ActiveCpu = x86_64::cpu::X86_64;
 #[cfg(target_arch = "aarch64")]

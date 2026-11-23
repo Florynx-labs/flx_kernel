@@ -14,10 +14,10 @@ class ArchitectureSupportContractTests(unittest.TestCase):
         self.assertIn("Blocked on a target-neutral boot handoff", doc)
         self.assertIn("does **not** call the production kernel entry point", doc)
 
-    def test_riscv_is_not_claimed_as_implemented(self):
+    def test_riscv_is_compile_only_not_boot_ready(self):
         doc = (ROOT / "docs/architecture/multiarch-implementation-status.md").read_text()
         self.assertIn("| RISC-V 64 |", doc)
-        self.assertIn("RISC-V remains planned", doc)
+        self.assertIn("RISC-V compile-check only", doc)
         self.assertIn("Do not add fake/no-op CPU primitives", doc)
 
     def test_performance_baseline_is_not_fabricated(self):

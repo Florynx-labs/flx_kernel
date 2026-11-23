@@ -96,3 +96,15 @@ jobs:
           path: |
             aarch64-uefi-serial.log
             aarch64-uefi-qemu-debug.log
+
+  riscv64-primitives-check:
+    name: RISC-V 64 primitive cross-check (compile only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RISC-V 64 Rust target
+        run: rustup target add riscv64gc-unknown-none-elf
+
+      - name: Cross-check RISC-V supervisor and SBI primitives
+        run: cargo check --package flx-riscv64-smoke --target riscv64gc-unknown-none-elf --color never

@@ -6,6 +6,7 @@ members = [
     "tools/mm-tests",
     "tools/arch-smoke",
     "tools/aarch64-uefi-smoke",
+    "tools/riscv64-smoke",
 ]
 
 [workspace.package]
