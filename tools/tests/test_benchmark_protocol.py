@@ -21,7 +21,7 @@ class BenchmarkProtocolTests(unittest.TestCase):
         source = (ROOT / "tools/mm-tests/src/bin/bench_memory.rs").read_text()
         protocol = (ROOT / "docs/performance/benchmark-protocol.md").read_text()
         self.assertIn("std::Mutex", source)
-        self.assertIn("not kernel/QEMU timings", source)
+        self.assertIn("NOT kernel/QEMU timings", source)
         self.assertIn("kernel spinlock", protocol)
         self.assertIn("Kernel baseline: not yet measured.", protocol)
 
