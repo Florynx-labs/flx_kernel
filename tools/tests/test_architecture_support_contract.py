@@ -20,6 +20,16 @@ class ArchitectureSupportContractTests(unittest.TestCase):
         self.assertIn("RISC-V remains planned", doc)
         self.assertIn("Do not add fake/no-op CPU primitives", doc)
 
+    def test_common_entry_uses_the_cpu_hal_for_interrupts_and_halt(self):
+        entry = (ROOT / "kernel/src/main.rs").read_text()
+        self.assertIn("arch::disable_local_interrupts()", entry)
+        self.assertIn("arch::enable_local_interrupts()", entry)
+        self.assertIn("arch::halt_forever()", entry)
+        self.assertIn("arch::initialize_cpu_tables()", entry)
+        self.assertNotIn("arch::x86_64::cpu::halt()", entry)
+        self.assertNotIn("arch::x86_64::gdt::", entry)
+        self.assertNotIn("arch::x86_64::idt::", entry)
+
     def test_performance_baseline_is_not_fabricated(self):
         doc = (ROOT / "docs/performance/benchmark-protocol.md").read_text()
         self.assertIn("**Not yet measured.**", doc)
