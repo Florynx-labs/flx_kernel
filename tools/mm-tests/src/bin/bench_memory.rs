@@ -176,6 +176,7 @@ fn main() {
     eprintln!("# rustc_host={}", env::var("FLX_BENCH_RUSTC_HOST").unwrap_or_else(|_| "unknown".into()));
     eprintln!("# commit={}", env::var("FLX_BENCH_COMMIT").unwrap_or_else(|_| "unknown".into()));
     eprintln!("# worktree_clean={}", env::var("FLX_BENCH_CLEAN").unwrap_or_else(|_| "unknown".into()));
+    eprintln!("# worktree_status={}", env::var("FLX_BENCH_WORKTREE_STATUS").unwrap_or_else(|_| "clean".into()));
     eprintln!("# host_kernel={}", env::var("FLX_BENCH_HOST_KERNEL").unwrap_or_else(|_| "unknown".into()));
     eprintln!("# host_cpu={}", env::var("FLX_BENCH_HOST_CPU").unwrap_or_else(|_| "unknown".into()));
     eprintln!("# warmup_batches={WARMUP_BATCHES} measured_batches={SAMPLES} operations_per_batch={OPS_PER_BATCH}");
