@@ -48,7 +48,7 @@ Until those gates pass, AArch64 full-kernel boot remains experimental.
 
 ### RISC-V 64
 
-The current milestone is **RISC-V compile-check only**; there is **no RISC-V full-kernel boot**.
+Do not add fake/no-op CPU primitives just to make the target compile. The current milestone is **RISC-V compile-check only**; there is **no RISC-V full-kernel boot**.
 The isolated `flx-riscv64-smoke` crate cross-checks real supervisor-mode CSR operations,
 direct-mode `stvec` setup, the SBI v0.2+ `ecall` register convention, and the SBI TIME
 `set_timer` call. These primitives are not wired into the production kernel entry or the
