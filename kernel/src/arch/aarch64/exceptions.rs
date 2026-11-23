@@ -147,15 +147,24 @@ extern "C" {
     static __flx_aarch64_el1_vectors: u8;
 }
 
+/// Why EL1 vector installation failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VectorInstallError {
+    /// The caller is not running at the exception level required by this vector table.
+    WrongExceptionLevel(u8),
+    /// The linker did not place the vector table on its architectural 2 KiB boundary.
+    MisalignedVectorTable { address: u64 },
+}
+
 /// Installs the aligned EL1 vector table and leaves IRQ/FIQ/SError/debug masked.
 ///
 /// # Safety
 /// Must be called from EL1 with a valid writable kernel stack. The vector table must remain
 /// mapped and executable for the lifetime of the kernel.
-pub unsafe fn install_el1_vectors() -> Result<(), u8> {
+pub unsafe fn install_el1_vectors() -> Result<(), VectorInstallError> {
     let level = super::current_exception_level();
     if level != 1 {
-        return Err(level);
+        return Err(VectorInstallError::WrongExceptionLevel(level));
     }
 
     // Mask all exception classes before publishing the vector table.
@@ -165,7 +174,7 @@ pub unsafe fn install_el1_vectors() -> Result<(), u8> {
 
     let address = core::ptr::addr_of!(__flx_aarch64_el1_vectors) as u64;
     if address as usize % VECTOR_TABLE_ALIGNMENT != 0 {
-        return Err(level);
+        return Err(VectorInstallError::MisalignedVectorTable { address });
     }
 
     // SAFETY: the linked vector table is 2 KiB aligned and remains in the image.

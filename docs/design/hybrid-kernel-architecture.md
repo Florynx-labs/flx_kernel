@@ -40,6 +40,12 @@ Firmware / hardware
 
 ### 3.1 Architecture HAL
 
+The current CPU facade lives in `kernel/src/arch`. Shared boot code should use its
+interrupt-mask, halt, address-space, TLB, and CPU-initialization functions rather than
+calling architecture modules directly. CPU exception setup returns a typed error so an
+unsupported privilege level or invalid vector-table placement cannot be reported as a
+successful initialization.
+
 Architecture-specific instructions, register layouts, exception entry, interrupt controllers, timers, context switching, and address-space activation belong under `kernel/src/arch/<arch>/`.
 
 Common code must call explicit contracts. A capability must not appear available on a target unless that target has a real implementation. Compile-only checks are useful but do not establish boot support.
