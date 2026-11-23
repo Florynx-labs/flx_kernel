@@ -22,7 +22,7 @@ class ArchitectureSupportContractTests(unittest.TestCase):
 
     def test_performance_baseline_is_not_fabricated(self):
         doc = (ROOT / "docs/performance/benchmark-protocol.md").read_text()
-        self.assertIn("**Not yet measured.**", doc)
+        self.assertIn("**Kernel baseline: not yet measured.**", doc)
         self.assertIn("raw samples", doc)
         self.assertIn("median", doc)
         self.assertIn("p95", doc)
