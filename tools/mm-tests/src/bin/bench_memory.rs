@@ -36,7 +36,7 @@ struct HostMapper {
     base: u64,
     length: usize,
     // Leaked for the benchmark process: the allocator stores mapped bitmap slices as 'static.
-    backing: &'static AlignedBacking,
+    backing: NonNull<u8>,
 }
 
 // SAFETY: this mapper owns a stable, writable host allocation for the full benchmark run.
@@ -48,7 +48,7 @@ unsafe impl PhysicalMemoryMapper for HostMapper {
         if end > self.length { return None; }
 
         // SAFETY: the bounds check proves the requested range is inside the owned backing.
-        NonNull::new(unsafe { self.backing.0.as_ptr().cast_mut().add(offset) })
+        NonNull::new(unsafe { self.backing.as_ptr().add(offset) })
     }
 }
 
@@ -90,14 +90,26 @@ fn percentile(sorted: &[u128], percentile: usize) -> u128 {
     sorted[rank.saturating_sub(1).min(sorted.len() - 1)]
 }
 
+fn boxed_zeroed<T>() -> Box<T> {
+    let layout = StdLayout::new::<T>();
+    // SAFETY: alloc_zeroed returns a suitably aligned allocation for this exact layout.
+    let pointer = unsafe { std::alloc::alloc_zeroed(layout).cast::<T>() };
+    if pointer.is_null() {
+        std::alloc::handle_alloc_error(layout);
+    }
+    // SAFETY: pointer was allocated with layout and is initialized to all-zero bytes.
+    unsafe { Box::from_raw(pointer) }
+}
+
 fn benchmark_frame_alloc_free() {
     // The frame allocator intentionally keeps its metadata mapped for kernel lifetime.
-    // Leak this host buffer so the mapper's returned pointers satisfy that same lifetime.
-    let backing = Box::leak(Box::new(AlignedBacking([0; BACKING_BYTES])));
+    // Leak this host buffer and retain only its raw pointer to avoid shared-reference aliasing.
+    let backing = Box::leak(boxed_zeroed::<AlignedBacking>());
+    let backing_pointer = NonNull::new(backing.0.as_mut_ptr()).expect("non-empty backing");
     let mapper = HostMapper {
         base: PHYSICAL_START,
         length: BACKING_BYTES,
-        backing,
+        backing: backing_pointer,
     };
     let region = Region {
         start: PHYSICAL_START,
@@ -125,7 +137,7 @@ fn benchmark_frame_alloc_free() {
 struct HeapBacking([u8; 2 * 1024 * 1024]);
 
 fn benchmark_heap_alloc_free(size: usize, alignment: usize, name: &'static str) {
-    let mut backing = Box::new(HeapBacking([0; 2 * 1024 * 1024]));
+    let mut backing = boxed_zeroed::<HeapBacking>();
     let heap = KernelHeap::new();
 
     // SAFETY: the aligned backing is exclusively owned by this heap and outlives it.
