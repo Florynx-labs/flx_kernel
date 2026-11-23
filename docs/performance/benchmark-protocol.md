@@ -52,7 +52,7 @@ median/p95/p99, and any deviations from this protocol.
 
 ## Host-side baseline harness
 
-Run `tools/benchmarks/run-host-memory.sh` to collect repeatable host-side samples for:
+Run `bash tools/benchmarks/run-host-memory.sh` to collect repeatable host-side samples for:
 - physical frame allocate/free batches;
 - heap allocate/free batches at 32, 128, and 512 bytes.
 
