@@ -123,14 +123,14 @@ pub unsafe fn sbi_call(
     function_id: usize,
     args: [usize; 6],
 ) -> SbiRet {
-    let error: isize;
+    let error_bits: usize;
     let value: usize;
 
     // SAFETY: the caller guarantees S-mode and a valid SBI extension/function contract.
     unsafe {
         asm!(
             "ecall",
-            inlateout("a0") args[0] => error,
+            inlateout("a0") args[0] => error_bits,
             inlateout("a1") args[1] => value,
             in("a2") args[2],
             in("a3") args[3],
@@ -142,7 +142,7 @@ pub unsafe fn sbi_call(
         );
     }
 
-    SbiRet { error, value }
+    SbiRet { error: error_bits as isize, value }
 }
 
 /// Programs the next absolute supervisor timer event through the SBI TIME extension.
