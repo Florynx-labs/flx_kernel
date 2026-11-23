@@ -62,7 +62,7 @@ where
         if index >= WARMUP_BATCHES {
             let sample_index = index - WARMUP_BATCHES;
             println!(
-                "{name},host,{},{}-{},{} ,{elapsed_ns},ns,ops_per_sample={units_per_batch}",
+                "{name},host,{},{}-{},{},{elapsed_ns},ns,ops_per_sample={units_per_batch}",
                 env::var("FLX_BENCH_COMMIT").unwrap_or_else(|_| "unknown".into()),
                 env::consts::OS,
                 env::consts::ARCH,
