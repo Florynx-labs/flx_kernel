@@ -37,6 +37,7 @@ jobs:
 
       - name: Run host memory benchmark (informational; no performance threshold)
         env:
+          FLX_BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           FLX_BENCH_OUTPUT_DIR: ${{ runner.temp }}/flx-bench
         run: bash tools/benchmarks/run-host-memory.sh
 
