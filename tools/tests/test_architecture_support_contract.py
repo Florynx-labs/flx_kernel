@@ -30,6 +30,12 @@ class ArchitectureSupportContractTests(unittest.TestCase):
         self.assertNotIn("arch::x86_64::gdt::", entry)
         self.assertNotIn("arch::x86_64::idt::", entry)
 
+    def test_aarch64_vector_setup_reports_distinct_failure_reasons(self):
+        exceptions = (ROOT / "kernel/src/arch/aarch64/exceptions.rs").read_text()
+        self.assertIn("WrongExceptionLevel(u8)", exceptions)
+        self.assertIn("MisalignedVectorTable { address: u64 }", exceptions)
+        self.assertNotIn("pub unsafe fn install_el1_vectors() -> Result<(), u8>", exceptions)
+
     def test_performance_baseline_is_not_fabricated(self):
         doc = (ROOT / "docs/performance/benchmark-protocol.md").read_text()
         self.assertIn("**Not yet measured.**", doc)
