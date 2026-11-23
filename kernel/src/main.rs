@@ -87,7 +87,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             Ok(()) => kok!("Kernel heap (1 MiB early arena)"),
             Err(error) => {
                 kerror!("Kernel heap self-test failed: {}", error);
-                loop { arch::halt_forever(); }
+                arch::halt_forever();
             }
         },
         Err(error) => {
@@ -236,7 +236,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             Some(value) => value,
             None => {
                 kerror!("Userspace smoke test requires the physical-memory mapping");
-                loop { arch::x86_64::cpu::halt(); }
+                arch::halt_forever();
             }
         };
         kok!("Preparing Ring 3 ELF smoke test");
@@ -246,7 +246,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             Ok(process) => process,
             Err(error) => {
                 kerror!("Ring 3 ELF smoke preparation failed: {:?}", error);
-                loop { arch::x86_64::cpu::halt(); }
+                arch::halt_forever();
             }
         };
         // One-way transition: the test ELF writes a marker to COM1 and then spins.
