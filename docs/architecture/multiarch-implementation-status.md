@@ -14,13 +14,13 @@ supported because its Rust primitives compile or because a separate firmware tes
 
 | Capability | x86_64 UEFI | AArch64 UEFI | RISC-V 64 |
 |---|---|---|---|
-| Firmware entry | Implemented through bootloader API | Experimental standalone UEFI smoke image | Planned (OpenSBI handoff not integrated) |
-| Full FLX kernel entry | Implemented | Blocked on a target-neutral boot handoff and x86-only entry split | Not implemented; compile-check only |
-| Serial console | COM1 | PL011 in smoke image only | Planned (SBI console not wired) |
-| Exception/trap path | IDT | EL1 vectors in smoke image | `stvec` write primitive only; no dispatcher |
-| Interrupt controller | PIC/PIT legacy QEMU path | GICv3 boot-CPU timer PPI smoke path | PLIC and trap dispatch remain unimplemented |
-| Timer | PIT | Generic Timer smoke path | SBI TIME call primitive only |
-| VM backend | x86_64 paging | CPU register primitives only; no AArch64 page-table backend | Planned (Sv39 not implemented) |
+| Firmware entry | Implemented through bootloader API | Experimental standalone UEFI smoke image | Planned |
+| Full FLX kernel entry | Implemented | Blocked on a target-neutral boot handoff and x86-only entry split | Planned |
+| Serial console | COM1 | PL011 in smoke image only | Planned |
+| Exception/trap path | IDT | EL1 vectors in smoke image | Planned |
+| Interrupt controller | PIC/PIT legacy QEMU path | GICv3 boot-CPU timer PPI smoke path | Planned |
+| Timer | PIT | Generic Timer smoke path | Planned |
+| VM backend | x86_64 paging | CPU register primitives only; no AArch64 page-table backend | Planned |
 | Scheduler/context switch | Experimental policy scaffolding; no production preemptive scheduler | Not integrated | Not implemented |
 | SMP | Not implemented | Not implemented | Not implemented |
 
@@ -48,35 +48,18 @@ Until those gates pass, AArch64 full-kernel boot remains experimental.
 
 ### RISC-V 64
 
-The current milestone is **RISC-V compile-check only**; there is **no RISC-V full-kernel boot**.
-The isolated `flx-riscv64-smoke` crate cross-checks real supervisor-mode CSR operations,
-direct-mode `stvec` setup, the SBI v0.2+ `ecall` register convention, and the SBI TIME
-`set_timer` call. These primitives are not wired into the production kernel entry or the
-shared `CpuArchitecture` backend.
-
-Bring-up contract for the next milestone:
-1. Firmware: OpenSBI v0.2+ transfers control to S-mode; the kernel receives hart ID in
-   `a0` and the device-tree pointer in `a1`.
-2. Keep supervisor interrupts masked until a valid `stvec` handler and interrupt routing exist.
-3. Use SBI TIME for the first timer source; do not assume direct CLINT access from S-mode.
-4. Implement and validate the QEMU `virt` PLIC path before claiming external interrupt support.
-5. Add a real Sv39 page-table backend and an architecture-neutral boot handoff before building
-   the production kernel for this target.
-
-Cross-check locally with `rustup target add riscv64gc-unknown-none-elf` followed by
-`cargo check --package flx-riscv64-smoke --target riscv64gc-unknown-none-elf`. The target is
-installed only by the dedicated CI job, not by the default toolchain profile.
-
-The current cross-check does not boot QEMU, install a trap dispatcher, configure PLIC, or
-enable Sv39. Do not label the target experimental-boot-ready until those runtime checks pass.
+Do not add fake/no-op CPU primitives just to make riscv64gc-unknown-none-elf compile.
+A real implementation needs an explicit boot contract (OpenSBI/SBI version and privilege
+level), trap-vector setup, timer source, interrupt-controller contract, and a separate QEMU
+smoke test. Only then should the architecture be exposed as an experimental target.
 
 ## Issue mapping
 
-- **#27**: not closed by the current AArch64 UEFI smoke test. Full kernel entry and QEMU
-  validation are still required.
-- **#29**: the Generic Timer and GICv3 path is validated only in the isolated AArch64 smoke
-  image. Integration with the production kernel interrupt dispatch remains required.
-- **#30**: RISC-V has an isolated compile-only S-mode/SBI primitive milestone; no RISC-V full-kernel boot. PLIC, trap dispatch, Sv39, and QEMU boot proof remain open.
+- **#27**: closed for the isolated AArch64 UEFI first-stage smoke milestone. This does not
+  establish full-kernel AArch64 boot support; that remains blocked by the handoff and entry split.
+- **#29**: closed for the isolated Generic Timer/GICv3 smoke path. Integration with the
+  production kernel interrupt dispatcher remains a separate future milestone.
+- **#30**: RISC-V remains planned until the SBI/trap/timer backend and QEMU boot proof exist.
 - **#31**: benchmark methodology is specified in docs/performance/benchmark-protocol.md;
   measured kernel baselines are still required before closing the issue.
 - **#39**: the hybrid monolithic architecture and subsystem boundaries are documented in
