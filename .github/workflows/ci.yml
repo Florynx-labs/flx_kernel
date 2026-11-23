@@ -35,6 +35,18 @@ jobs:
       - name: Test memory-management algorithms
         run: cargo test --package flx-mm-tests --color never
 
+      - name: Run host memory benchmark (informational; no performance threshold)
+        env:
+          FLX_BENCH_OUTPUT_DIR: ${{ runner.temp }}/flx-bench
+        run: bash tools/benchmarks/run-host-memory.sh
+
+      - name: Upload host memory benchmark samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-memory-benchmark
+          path: ${{ runner.temp }}/flx-bench/*
+
       - name: Cross-check AArch64 CPU primitives
         run: cargo check --package flx-arch-smoke --target aarch64-unknown-none --color never
 
