@@ -4,7 +4,6 @@
 //! test harness. The harness uses std::Mutex in place of the kernel IRQ-safe spinlock,
 //! so results are NOT kernel/QEMU timings and must never be reported as such.
 
-use core::alloc::Layout;
 use flx_mm_tests::heap::KernelHeap;
 use flx_mm_tests::mm::frame::{self, FrameMemoryRegion};
 use flx_mm_tests::mm::mapper::PhysicalMemoryMapper;
@@ -36,7 +35,8 @@ impl FrameMemoryRegion for Region {
 struct HostMapper {
     base: u64,
     length: usize,
-    backing: Box<AlignedBacking>,
+    // Leaked for the benchmark process: the allocator stores mapped bitmap slices as 'static.
+    backing: &'static AlignedBacking,
 }
 
 // SAFETY: this mapper owns a stable, writable host allocation for the full benchmark run.
@@ -62,7 +62,7 @@ where
         if index >= WARMUP_BATCHES {
             let sample_index = index - WARMUP_BATCHES;
             println!(
-                "{name},host,{},{}-{}, {},{elapsed_ns},ns,ops_per_sample={units_per_batch}",
+                "{name},host,{},{}-{},{} ,{elapsed_ns},ns,ops_per_sample={units_per_batch}",
                 env::var("FLX_BENCH_COMMIT").unwrap_or_else(|_| "unknown".into()),
                 env::consts::OS,
                 env::consts::ARCH,
@@ -91,7 +91,9 @@ fn percentile(sorted: &[u128], percentile: usize) -> u128 {
 }
 
 fn benchmark_frame_alloc_free() {
-    let backing = Box::new(AlignedBacking([0; BACKING_BYTES]));
+    // The frame allocator intentionally keeps its metadata mapped for kernel lifetime.
+    // Leak this host buffer so the mapper's returned pointers satisfy that same lifetime.
+    let backing = Box::leak(Box::new(AlignedBacking([0; BACKING_BYTES])));
     let mapper = HostMapper {
         base: PHYSICAL_START,
         length: BACKING_BYTES,
