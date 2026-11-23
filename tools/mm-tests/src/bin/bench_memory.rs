@@ -173,6 +173,11 @@ fn main() {
     println!("benchmark,target,commit,environment,iteration,elapsed_ns,unit,notes");
     eprintln!("# host-only benchmark; lock backend is std::Mutex, not the kernel spinlock");
     eprintln!("# rustc={}", env::var("FLX_BENCH_RUSTC").unwrap_or_else(|_| "unknown".into()));
+    eprintln!("# rustc_host={}", env::var("FLX_BENCH_RUSTC_HOST").unwrap_or_else(|_| "unknown".into()));
+    eprintln!("# commit={}", env::var("FLX_BENCH_COMMIT").unwrap_or_else(|_| "unknown".into()));
+    eprintln!("# worktree_clean={}", env::var("FLX_BENCH_CLEAN").unwrap_or_else(|_| "unknown".into()));
+    eprintln!("# host_kernel={}", env::var("FLX_BENCH_HOST_KERNEL").unwrap_or_else(|_| "unknown".into()));
+    eprintln!("# host_cpu={}", env::var("FLX_BENCH_HOST_CPU").unwrap_or_else(|_| "unknown".into()));
     eprintln!("# warmup_batches={WARMUP_BATCHES} measured_batches={SAMPLES} operations_per_batch={OPS_PER_BATCH}");
 
     benchmark_frame_alloc_free();
