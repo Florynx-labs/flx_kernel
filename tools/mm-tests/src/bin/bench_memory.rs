@@ -90,7 +90,11 @@ fn percentile(sorted: &[u128], percentile: usize) -> u128 {
     sorted[rank.saturating_sub(1).min(sorted.len() - 1)]
 }
 
-fn boxed_zeroed<T>() -> Box<T> {
+/// Allocate zeroed storage for byte-only benchmark backing structs.
+///
+/// # Safety
+/// `T` must permit an all-zero byte representation (true for the two byte-array wrappers below).
+unsafe fn boxed_zeroed<T>() -> Box<T> {
     let layout = StdLayout::new::<T>();
     // SAFETY: alloc_zeroed returns a suitably aligned allocation for this exact layout.
     let pointer = unsafe { std::alloc::alloc_zeroed(layout).cast::<T>() };
@@ -104,7 +108,8 @@ fn boxed_zeroed<T>() -> Box<T> {
 fn benchmark_frame_alloc_free() {
     // The frame allocator intentionally keeps its metadata mapped for kernel lifetime.
     // Leak this host buffer and retain only its raw pointer to avoid shared-reference aliasing.
-    let backing = Box::leak(boxed_zeroed::<AlignedBacking>());
+    // SAFETY: AlignedBacking contains only u8 bytes, so all-zero is a valid value.
+    let backing = Box::leak(unsafe { boxed_zeroed::<AlignedBacking>() });
     let backing_pointer = NonNull::new(backing.0.as_mut_ptr()).expect("non-empty backing");
     let mapper = HostMapper {
         base: PHYSICAL_START,
@@ -137,7 +142,8 @@ fn benchmark_frame_alloc_free() {
 struct HeapBacking([u8; 2 * 1024 * 1024]);
 
 fn benchmark_heap_alloc_free(size: usize, alignment: usize, name: &'static str) {
-    let mut backing = boxed_zeroed::<HeapBacking>();
+    // SAFETY: HeapBacking contains only u8 bytes, so all-zero is a valid value.
+    let mut backing = unsafe { boxed_zeroed::<HeapBacking>() };
     let heap = KernelHeap::new();
 
     // SAFETY: the aligned backing is exclusively owned by this heap and outlives it.
