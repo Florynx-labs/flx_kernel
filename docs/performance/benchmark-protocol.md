@@ -50,8 +50,25 @@ benchmark,target,commit,environment,iteration,elapsed_ns,unit,notes
 The Markdown summary must include the environment record, command line, raw artifact link,
 median/p95/p99, and any deviations from this protocol.
 
+## Host-side baseline harness
+
+Run `bash tools/benchmarks/run-host-memory.sh` to collect repeatable host-side samples for:
+- physical frame allocate/free batches;
+- heap allocate/free batches at 32, 128, and 512 bytes.
+
+The runner records the commit, Rust compiler version, host OS/architecture, warm-up count,
+raw samples, and median/p95/p99 summary. Output is written as a CSV plus a companion
+environment/summary text file under `benchmarks/results/host/`.
+
+**Important:** the host harness uses the `flx-mm-tests` adapter, whose lock is backed by
+`std::Mutex`. It measures allocator algorithms plus host synchronization overhead, not the
+kernel spinlock, interrupt latency, TLB operations, or QEMU execution. Never compare these
+numbers directly with kernel measurements or use them to close the full issue #31.
+
 ## Current baseline status
 
-**Not yet measured.** The current repository has boot smoke tests and memory-management
-correctness tests, but those are not a performance baseline. Do not claim issue #31 is complete
-until the required benchmark harnesses and reproducible measurements are checked in.
+**Kernel baseline: not yet measured.** The host harness is a first reproducible data point,
+not a substitute for guest/kernel benchmarks. Address-space activation, TLB invalidation,
+kernel spinlock contention, and interrupt latency remain unmeasured until their hardware-backed
+harnesses are implemented. Do not claim issue #31 is complete until those required measurements
+and before/after correctness checks are available.

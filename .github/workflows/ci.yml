@@ -23,6 +23,19 @@ jobs:
           rustup component add llvm-tools-preview rust-src
           rustup target add aarch64-unknown-none
 
+      - name: Run host memory benchmark (informational; no performance threshold)
+        env:
+          FLX_BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          FLX_BENCH_OUTPUT_DIR: ${{ runner.temp }}/flx-bench
+        run: bash tools/benchmarks/run-host-memory.sh
+
+      - name: Upload host memory benchmark samples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-memory-benchmark
+          path: ${{ runner.temp }}/flx-bench/*
+
       - name: Install QEMU
         timeout-minutes: 8
         run: |
