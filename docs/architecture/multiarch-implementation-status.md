@@ -55,10 +55,10 @@ smoke test. Only then should the architecture be exposed as an experimental targ
 
 ## Issue mapping
 
-- **#27**: not closed by the current AArch64 UEFI smoke test. Full kernel entry and QEMU
-  validation are still required.
-- **#29**: the Generic Timer and GICv3 path is validated only in the isolated AArch64 smoke
-  image. Integration with the production kernel interrupt dispatch remains required.
+- **#27**: closed for the isolated AArch64 UEFI first-stage smoke milestone. This does not
+  establish full-kernel AArch64 boot support; that remains blocked by the handoff and entry split.
+- **#29**: closed for the isolated Generic Timer/GICv3 smoke path. Integration with the
+  production kernel interrupt dispatcher remains a separate future milestone.
 - **#30**: RISC-V remains planned until the SBI/trap/timer backend and QEMU boot proof exist.
 - **#31**: benchmark methodology is specified in docs/performance/benchmark-protocol.md;
   measured kernel baselines are still required before closing the issue.
