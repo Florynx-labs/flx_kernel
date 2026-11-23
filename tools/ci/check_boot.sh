@@ -41,8 +41,7 @@ forbid() {
 
 require "[OK   ] Boot"
 require "[OK   ] Memory map"
-require "[OK   ] GDT + TSS"
-require "[OK   ] IDT + CPU exceptions"
+require "[OK   ] Architecture CPU tables / exception vectors"
 require "[OK   ] Frame allocator ("
 require "[OK   ] Frame allocator self-test"
 require "[OK   ] Heap growth ("
