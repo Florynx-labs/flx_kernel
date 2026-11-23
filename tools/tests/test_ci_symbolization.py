@@ -42,7 +42,10 @@ class RipSymbolizationTests(unittest.TestCase):
         self.assertIn('[ "${status}" -ne 124 ]', SMOKE)
         self.assertIn("timeout is only a bounded stop mechanism", SMOKE)
 
-    def test_boot_script_checks_heap_growth_and_paging(self):
+    def test_boot_script_checks_architecture_hal_and_memory_subsystems(self):
+        self.assertIn('require "[OK   ] Architecture CPU tables / exception vectors"', BOOT)
+        self.assertNotIn('require "[OK   ] GDT + TSS"', BOOT)
+        self.assertNotIn('require "[OK   ] IDT + CPU exceptions"', BOOT)
         self.assertIn('require "[OK   ] Heap growth self-test ("', BOOT)
         self.assertIn('require "[OK   ] Paging (active CR3"', BOOT)
 
